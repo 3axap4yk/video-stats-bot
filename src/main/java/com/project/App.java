@@ -62,6 +62,7 @@ public class App {
                     }
                 }
             }
+            
             // Подтверждаем, что все обновления обработаны
             return UpdatesListener.CONFIRMED_UPDATES_ALL;
         });
