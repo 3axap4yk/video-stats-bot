@@ -58,7 +58,6 @@ public class App {
 
                     if ("hello_btn".equals(data)) {
                         bot.execute(new SendMessage(chatId, "Hello World!"));
-                        // Убираем "часики" загрузки с кнопки
                         bot.execute(new com.pengrad.telegrambot.request.AnswerCallbackQuery(update.callbackQuery().id()));
                     }
                 }
