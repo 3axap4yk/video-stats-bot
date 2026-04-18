@@ -61,5 +61,42 @@ public class YouTubeClient {
 
         return response.body();
     }
+    // Получить количество просмотров
+    public long getViewCount() throws Exception {
+        String jsonResponse = sendRequest();
+        return parseViewCount(jsonResponse);
+    }
 
+    // Парсинг просмотров из JSON
+    private long parseViewCount(String json) {
+        // Ищем viewCount в JSON ответе
+        String searchPattern = "\"viewCount\":";
+        int startIndex = json.indexOf(searchPattern);
+
+        if (startIndex != -1) {
+            startIndex += searchPattern.length();
+
+            // Пропускаем пробелы
+            while (startIndex < json.length() && json.charAt(startIndex) == ' ') {
+                startIndex++;
+            }
+
+            // Если значение в кавычках
+            if (json.charAt(startIndex) == '"') {
+                startIndex++;
+                int endIndex = json.indexOf("\"", startIndex);
+                return Long.parseLong(json.substring(startIndex, endIndex));
+            }
+            // Если значение без кавычек
+            else {
+                int endIndex = json.indexOf(",", startIndex);
+                if (endIndex == -1) {
+                    endIndex = json.indexOf("}", startIndex);
+                }
+                return Long.parseLong(json.substring(startIndex, endIndex).trim());
+            }
+        }
+
+        throw new RuntimeException("Не удалось найти viewCount в ответе API для видео " + videoId);
+    }
 }
