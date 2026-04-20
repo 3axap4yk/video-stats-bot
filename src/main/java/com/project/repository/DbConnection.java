@@ -36,7 +36,7 @@ public class DbConnection {
                 Class.forName("org.postgresql.Driver");
 
                 System.out.println("Подключение к БД: " + getDbUrl());
-                System.out.println("Пользователь: " + getDbUser());
+
 
                 // Создаем соединение
                 connection = DriverManager.getConnection(
