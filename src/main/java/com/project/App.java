@@ -35,6 +35,8 @@ public class App {
         // new VideoStatsBot(botToken).start();
 
 
-        DbConnection.testConnection();
+        // Проверка доступности БД
+        if (!DbConnection.isDatabaseAvailable())
+            System.err.println("⚠️ БД недоступна, бот будет работать без сохранения данных");
     }
 }

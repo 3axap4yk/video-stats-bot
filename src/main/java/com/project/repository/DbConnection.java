@@ -78,6 +78,20 @@ public class DbConnection {
             return false;
         }
     }
+
+    // Проверка доступности БД с возвратом статуса
+    public static boolean isDatabaseAvailable() {
+        try {
+            Connection conn = getConnection();
+            boolean isConnected = conn != null && !conn.isClosed();
+            closeConnection();
+            return isConnected;
+        } catch (SQLException e) {
+            System.err.println("❌ БД недоступна: " + e.getMessage());
+            return false;
+        }
+    }
+
     public static void testConnection() {
         System.out.println("\n=== ТЕСТ ПОДКЛЮЧЕНИЯ К БД ===\n");
 
