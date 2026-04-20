@@ -78,4 +78,36 @@ public class DbConnection {
             return false;
         }
     }
+    public static void testConnection() {
+        System.out.println("\n=== ТЕСТ ПОДКЛЮЧЕНИЯ К БД ===\n");
+
+        try {
+            // Пытаемся подключиться
+            Connection conn = getConnection();
+
+            if (conn != null && !conn.isClosed()) {
+                System.out.println("✅ ПОДКЛЮЧЕНИЕ УСПЕШНО!");
+                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                System.out.println("📊 Информация о подключении:");
+                System.out.println("   URL: " + conn.getMetaData().getURL());
+                System.out.println("   Версия БД: " + conn.getMetaData().getDatabaseProductVersion());
+                System.out.println("   Драйвер: " + conn.getMetaData().getDriverName());
+                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            } else {
+                System.out.println("❌ Не удалось получить подключение");
+            }
+
+        } catch (SQLException e) {
+            System.out.println("❌ ОШИБКА ПОДКЛЮЧЕНИЯ!");
+            System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            System.out.println("Сообщение: " + e.getMessage());
+            System.out.println("\nВозможные причины:");
+            System.out.println("   1. PostgreSQL не запущен");
+            System.out.println("   2. Неправильные параметры в .env");
+            System.out.println("   3. База данных не существует");
+            System.out.println("   4. Неверный пароль");
+            System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            e.printStackTrace();
+        }
+    }
 }

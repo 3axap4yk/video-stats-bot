@@ -1,4 +1,5 @@
 package com.project;
+import com.project.repository.DbConnection;
 import io.github.cdimascio.dotenv.Dotenv;
 
 // Точка входа в приложение.
@@ -32,5 +33,8 @@ public class App {
         System.out.println("App.java компилируется и работает!");
         // Дальше здесь будет инициализация бота:
         // new VideoStatsBot(botToken).start();
+
+
+        DbConnection.testConnection();
     }
 }
