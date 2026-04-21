@@ -1,8 +1,10 @@
 package com.project;
 
 import com.pengrad.telegrambot.TelegramBot;
-import com.project.bot.VideoStatsBot;
+import com.project.bot.TelegramUserWhitelist;
 import com.project.bot.UrlResolver;
+import com.project.bot.VideoStatsBot;
+import com.project.service.StatisticsService;
 import io.github.cdimascio.dotenv.Dotenv;
 
 // Точка входа в приложение.
@@ -24,7 +26,18 @@ public class App {
         }
 
         TelegramBot bot = new TelegramBot(botToken);
-        VideoStatsBot videoStatsBot = new VideoStatsBot(bot, new UrlResolver());
+        TelegramUserWhitelist whitelist = TelegramUserWhitelist.fromCommaSeparatedIds(dotenv.get("ALLOWED_TELEGRAM_IDS"));
+        if (whitelist.isRestrictionEnabled()) {
+            System.out.println("Включён whitelist по Telegram user id (ALLOWED_TELEGRAM_IDS).");
+        } else {
+            System.out.println("Whitelist не задан — бот отвечает всем пользователям.");
+        }
+
+        VideoStatsBot videoStatsBot = new VideoStatsBot(
+                bot,
+                new UrlResolver(),
+                new StatisticsService(),
+                whitelist);
         System.out.println("Бот запущен. Жду команды...");
 
         // Делегируем обработку обновлений специализированному классу бота.
