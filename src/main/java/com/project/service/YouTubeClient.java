@@ -8,19 +8,27 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
 // HTTP-запросы к YouTube Data API v3
-// Парсинг JSON-ответа и извлечение количества просмотров
+// Парсинг JSON-ответа
 
 public class YouTubeClient {
     private final String apiKey;
-    private final String videoUrl;
-    private final String videoId;
     private final HttpClient httpClient;
 
-    public YouTubeClient(String videoUrl) {
+    public YouTubeClient() {
         this.apiKey = loadApiKey();
-        this.videoUrl = videoUrl;
-        this.videoId = extractVideoId(videoUrl);
         this.httpClient = HttpClient.newHttpClient();
+    }
+
+    //Получение просмотров
+    public long getViewCountByVideoId(String videoId) throws Exception {
+        String jsonResponse = sendRequest(videoId);
+        return parseViewCount(jsonResponse, videoId);
+    }
+
+    //Получение названия
+    public String getTitleByVideoId(String videoId) throws Exception {
+        String jsonResponse = sendRequest(videoId);
+        return parseTitle(jsonResponse, videoId);
     }
 
     //Загрузка API из .env
@@ -29,27 +37,8 @@ public class YouTubeClient {
         return dotenv.get("YOUTUBE_API_KEY");
     }
 
-    //Метод извлечения ID из ссылки
-    private String extractVideoId(String videoUrl) {
-        String videoId = null;
-
-        if (videoUrl.contains("youtu.be/")) {
-            videoId = videoUrl.substring(videoUrl.lastIndexOf("/") + 1);
-            if (videoId.contains("?")) {
-                videoId = videoId.split("\\?") [0];
-            }
-        } else if (videoUrl.contains("v=")) {
-            videoId = videoUrl.split("v=") [1];
-            if (videoId.contains("&")) {
-                videoId = videoId.split("&") [0];
-            }
-        }
-
-        return videoId;
-    }
-
     //Отправка HTTPS запроса
-    public String sendRequest() throws Exception {
+    private String sendRequest(String videoId) throws Exception {
         String requestUrl = String.format("https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=%s&key=%s", videoId, apiKey);
 
         HttpRequest request = HttpRequest.newBuilder()
@@ -61,14 +50,9 @@ public class YouTubeClient {
 
         return response.body();
     }
-    // Получить количество просмотров
-    public long getViewCount() throws Exception {
-        String jsonResponse = sendRequest();
-        return parseViewCount(jsonResponse);
-    }
 
     // Парсинг просмотров из JSON
-    private long parseViewCount(String json) {
+    private long parseViewCount(String json, String videoId) {
         // Ищем viewCount в JSON ответе
         String searchPattern = "\"viewCount\":";
         int startIndex = json.indexOf(searchPattern);
@@ -98,5 +82,30 @@ public class YouTubeClient {
         }
 
         throw new RuntimeException("Не удалось найти viewCount в ответе API для видео " + videoId);
+    }
+
+    //Парсинг названия из JSON
+    private String parseTitle(String json, String videoId) {
+        // Ищем title в JSON ответе
+        String searchPattern = "\"title\":";
+        int startIndex = json.indexOf(searchPattern);
+
+        if (startIndex != -1) {
+            startIndex += searchPattern.length();
+
+            // Пропускаем пробелы
+            while (startIndex < json.length() && json.charAt(startIndex) == ' ') {
+                startIndex++;
+            }
+
+            // Название всегда в кавычках
+            if (json.charAt(startIndex) == '"') {
+                startIndex++;
+                int endIndex = json.indexOf("\"", startIndex);
+                return json.substring(startIndex, endIndex);
+            }
+        }
+
+        throw new RuntimeException("Не удалось найти title в ответе API для видео " + videoId);
     }
 }
