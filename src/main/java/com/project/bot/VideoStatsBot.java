@@ -20,8 +20,6 @@ import static com.project.bot.BotMessages.BTN_LINKS_LIST;
 import static com.project.bot.BotMessages.BTN_REFRESH_STATS;
 import static com.project.bot.BotMessages.GREETING;
 
-// Главный обработчик Telegram-диалога: маршрутизация апдейтов и управление сценарием добавления ссылок.
-
 public class VideoStatsBot {
     private final TelegramBot bot;
     private final TelegramUserWhitelist userWhitelist;
@@ -42,21 +40,29 @@ public class VideoStatsBot {
     }
 
     public void start() {
+        System.out.println("🔄 Удаляем webhook и запускаем long polling...");
+        bot.execute(new com.pengrad.telegrambot.request.DeleteWebhook());
         bot.setUpdatesListener(this::processUpdates);
     }
 
-    // Единая точка обработки входящих апдейтов Telegram.
     private int processUpdates(java.util.List<Update> updates) {
+        System.out.println("📨 Получено обновлений: " + updates.size());
+
         for (Update update : updates) {
+            System.out.println("Обработка update: " + update);
+
             Long userId = extractTelegramUserId(update);
+            System.out.println("User ID: " + userId);
+
             if (!userWhitelist.allows(userId)) {
+                System.out.println("❌ Доступ запрещён для user: " + userId);
                 handleDenied(update, userId);
                 continue;
             }
 
-            // /start всегда возвращает пользователя в корневое меню и сбрасывает режим ожидания URL.
             if (update.message() != null && "/start".equals(update.message().text())) {
                 long chatId = update.message().chat().id();
+                System.out.println("📌 Команда /start от чата: " + chatId);
                 addLinks.resetChat(chatId);
                 sendStartDialog(chatId);
             } else if (update.message() != null
@@ -64,24 +70,34 @@ public class VideoStatsBot {
                     && !update.message().text().startsWith("/")
                     && addLinks.isAwaitingUrl(update.message().chat().id())) {
                 long chatId = update.message().chat().id();
-                // В этом состоянии любое текстовое сообщение трактуем как кандидат на URL.
+                System.out.println("🔗 Получена ссылка от чата: " + chatId + " -> " + update.message().text());
                 addLinks.onSubmittedUrl(chatId, update.message().text().trim());
             } else if (update.callbackQuery() != null) {
                 String data = update.callbackQuery().data();
                 long chatId = update.callbackQuery().message().chat().id();
                 String callbackQueryId = update.callbackQuery().id();
+                System.out.println("🔘 Callback получен: data=" + data + ", chatId=" + chatId);
 
                 if (ADD_LINK.equals(data)) {
+                    System.out.println("➕ Обработка ADD_LINK");
                     addLinks.onAddLinkClick(chatId, callbackQueryId);
                 } else if (LINKS_LIST.equals(data)) {
+                    System.out.println("📋 Обработка LINKS_LIST");
                     listLinks.onClick(chatId, callbackQueryId);
                 } else if (REFRESH_STATS.equals(data)) {
+                    System.out.println("🔄 Обработка REFRESH_STATS");
                     updateLinks.onClick(chatId, callbackQueryId);
                 } else if (CANCEL.equals(data)) {
+                    System.out.println("❌ Обработка CANCEL");
                     addLinks.onCancel(chatId, callbackQueryId);
                 } else if (BACK.equals(data)) {
+                    System.out.println("🔙 Обработка BACK");
                     addLinks.onBack(chatId, callbackQueryId);
+                } else {
+                    System.out.println("⚠️ Неизвестный callback: " + data);
                 }
+            } else {
+                System.out.println("ℹ️ Другое обновление (не сообщение и не callback)");
             }
         }
 
@@ -120,8 +136,8 @@ public class VideoStatsBot {
         return 0L;
     }
 
-    // Отправляет стартовый экран с основными действиями пользователя.
     private void sendStartDialog(long chatId) {
+        System.out.println("📤 Отправляем стартовое меню в чат: " + chatId);
         InlineKeyboardButton addLinkBtn = new InlineKeyboardButton(BTN_ADD_LINK).callbackData(ADD_LINK);
         InlineKeyboardButton linksListBtn = new InlineKeyboardButton(BTN_LINKS_LIST).callbackData(LINKS_LIST);
         InlineKeyboardButton refreshStatsBtn = new InlineKeyboardButton(BTN_REFRESH_STATS).callbackData(REFRESH_STATS);
