@@ -8,9 +8,17 @@ public class StatisticsService {
     private final String videoId;
     private final YouTubeClient youTubeClient;
 
-    public StatisticsService(String videoUrl) {
+    public StatisticsService(String videoUrl) throws YouTubeException {
+        if (videoUrl == null || videoUrl.trim().isEmpty()) {
+            throw new YouTubeException("URL видео не может быть пустым");
+        }
         this.videoUrl = videoUrl;
         this.videoId = extractVideoId(videoUrl);
+
+        if (this.videoId == null || this.videoId.trim().isEmpty()) {
+            throw new YouTubeException("Не удалось извлечь ID видео из URL: " + videoUrl);
+        }
+
         this.youTubeClient = new YouTubeClient();
     }
 
@@ -33,11 +41,19 @@ public class StatisticsService {
         return videoId;
     }
 
-    public long getViewCount() throws Exception {
+    public long getViewCount() throws YouTubeException {
         return youTubeClient.getViewCountByVideoId(videoId);
     }
 
-    public String getTitle() throws Exception {
+    public String getTitle() throws YouTubeException {
         return youTubeClient.getTitleByVideoId(videoId);
+    }
+
+    public String getVideoUrl() {
+        return videoUrl;
+    }
+
+    public String getVideoId() {
+        return videoId;
     }
 }
