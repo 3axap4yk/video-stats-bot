@@ -1,5 +1,10 @@
 package com.project;
+import com.pengrad.telegrambot.TelegramBot;
+import com.project.bot.TelegramUserWhitelist;
+import com.project.bot.UrlResolver;
+import com.project.bot.VideoStatsBot;
 import com.project.repository.DbConnection;
+import com.project.service.StatisticsService;
 import io.github.cdimascio.dotenv.Dotenv;
 
 // Точка входа в приложение.
@@ -33,6 +38,13 @@ public class App {
         System.out.println("App.java компилируется и работает!");
         // Дальше здесь будет инициализация бота:
         // new VideoStatsBot(botToken).start();
+        TelegramBot bot = new TelegramBot(botToken);
+        UrlResolver urlResolver = new UrlResolver();
+        StatisticsService statisticsService = new StatisticsService();
+        TelegramUserWhitelist whitelist = TelegramUserWhitelist.fromCommaSeparatedIds(null);
+        VideoStatsBot videoStatsBot = new VideoStatsBot(bot, urlResolver, statisticsService, whitelist);
+        videoStatsBot.start();
+
 
 
         // Проверка доступности БД
