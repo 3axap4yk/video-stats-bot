@@ -1,12 +1,17 @@
 package com.project.bot;
 
 import com.pengrad.telegrambot.TelegramBot;
+import com.pengrad.telegrambot.model.request.InlineKeyboardButton;
+import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 import com.pengrad.telegrambot.request.AnswerCallbackQuery;
 import com.pengrad.telegrambot.request.SendMessage;
 import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
 
 import java.util.List;
+
+import static com.project.bot.BotCallbacks.BACK;
+import static com.project.bot.BotMessages.BTN_BACK;
 
 public class ListLinks {
     private final TelegramBot bot;
@@ -31,23 +36,24 @@ public class ListLinks {
             return;
         }
 
-        // Простой текст без Markdown
+        // Формируем сообщение со списком
         StringBuilder message = new StringBuilder("📋 СПИСОК ССЫЛОК:\n\n");
 
         for (int i = 0; i < videos.size(); i++) {
             VideoStats video = videos.get(i);
             message.append(i + 1).append(". ");
             message.append(video.getTitle()).append("\n");
-            message.append("   Просмотров: ").append(video.getViewCount()).append("\n");
-            message.append("   Ссылка: ").append(video.getVideoUrl()).append("\n");
-            message.append("   Обновлено: ").append(video.getLastUpdated()).append("\n\n");
+            message.append("   📊 Просмотров: ").append(video.getViewCount()).append("\n");
+            message.append("   🔗 Ссылка: ").append(video.getVideoUrl()).append("\n");
+            message.append("   🕐 Обновлено: ").append(video.getLastUpdated()).append("\n\n");
         }
 
-        System.out.println("📨 Отправляем сообщение:\n" + message.toString());
+        // Добавляем кнопку "Вернуться"
+        InlineKeyboardButton backButton = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
+        InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(backButton);
 
-        com.pengrad.telegrambot.request.SendMessage request = new SendMessage(chatId, message.toString());
-        bot.execute(request);
-
+        System.out.println("📨 Отправляем сообщение со списком и кнопкой возврата...");
+        bot.execute(new SendMessage(chatId, message.toString()).replyMarkup(keyboard));
         System.out.println("✅ Сообщение отправлено");
     }
 }
