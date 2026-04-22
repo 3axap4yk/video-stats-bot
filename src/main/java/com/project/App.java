@@ -1,10 +1,5 @@
 package com.project;
-
-import com.pengrad.telegrambot.TelegramBot;
-import com.project.bot.TelegramUserWhitelist;
-import com.project.bot.UrlResolver;
-import com.project.bot.VideoStatsBot;
-import com.project.service.StatisticsService;
+import com.project.repository.DbConnection;
 import io.github.cdimascio.dotenv.Dotenv;
 
 // Точка входа в приложение.
@@ -17,33 +12,31 @@ public class App {
         return dotenv.get("BOT_TOKEN");
     }
 
+    public static String getYouTubeApiKey() {
+        return dotenv.get("YOUTUBE_API_KEY");
+    }
     public static void main(String[] args) {
-        // Читаем токен из .env
+        System.out.println("VideoStatsBot starting...");
+
         String botToken = getBotToken();
-        if (botToken == null || botToken.isEmpty()) {
-            System.err.println("Ошибка: не задана переменная BOT_TOKEN");
-            return;
-        }
+        String youtubeKey = getYouTubeApiKey();
 
-        TelegramBot bot = new TelegramBot(botToken);
-        TelegramUserWhitelist whitelist = TelegramUserWhitelist.fromCommaSeparatedIds(dotenv.get("ALLOWED_TELEGRAM_IDS"));
-        if (whitelist.isRestrictionEnabled()) {
-            System.out.println("Включён whitelist по Telegram user id (ALLOWED_TELEGRAM_IDS).");
+        // Проверка: не пустые ли значения
+        if (botToken == null || botToken.isEmpty() || youtubeKey == null || youtubeKey.isEmpty()) {
+            System.out.println("Переменные окружения не найдены или пусты");
         } else {
-            System.out.println("Whitelist не задан — бот отвечает всем пользователям.");
+            System.out.println("BOT_TOKEN найден: " + botToken);
+            System.out.println("YOUTUBE_API_KEY найден: " + youtubeKey);
+            System.out.println("Конфигурация загружена успешно");
         }
 
-        VideoStatsBot videoStatsBot = new VideoStatsBot(
-                bot,
-                new UrlResolver(),
-                new StatisticsService(),
-                whitelist);
-        System.out.println("Бот запущен. Жду команды...");
+        System.out.println("App.java компилируется и работает!");
+        // Дальше здесь будет инициализация бота:
+        // new VideoStatsBot(botToken).start();
 
-        // Делегируем обработку обновлений специализированному классу бота.
-        videoStatsBot.start();
 
-        // Держим поток живым (для локального запуска)
-        try { Thread.sleep(Long.MAX_VALUE); } catch (InterruptedException e) {}
+        // Проверка доступности БД
+        if (!DbConnection.isDatabaseAvailable())
+            System.err.println("⚠️ БД недоступна, бот будет работать без сохранения данных");
     }
 }
