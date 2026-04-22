@@ -20,8 +20,8 @@ dependencies {
     // Dotenv для .env файлов
     implementation 'io.github.cdimascio:dotenv-java:3.0.0'
 
-    // Telegram Bot API (понадобится позже)
-    implementation 'org.telegram:telegrambots:6.9.7.1'
+    // Telegram Bot API (pengrad) — используется в com.pengrad.telegrambot.*
+    implementation 'com.github.pengrad:java-telegram-bot-api:7.4.0'
 }
 
 application {
