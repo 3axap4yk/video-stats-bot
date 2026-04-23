@@ -30,8 +30,6 @@ public class App {
             return;
         }
 
-        System.out.println("✅ BOT_TOKEN найден: " + botToken);
-        System.out.println("✅ YOUTUBE_API_KEY найден: " + youtubeKey);
         System.out.println("Конфигурация загружена успешно");
 
         boolean dbAvailable = DbConnection.isDatabaseAvailable();
