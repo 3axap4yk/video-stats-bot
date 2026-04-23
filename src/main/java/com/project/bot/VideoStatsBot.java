@@ -7,7 +7,6 @@ import com.pengrad.telegrambot.model.request.InlineKeyboardButton;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 import com.pengrad.telegrambot.request.AnswerCallbackQuery;
 import com.pengrad.telegrambot.request.SendMessage;
-import com.project.service.StatisticsService;
 
 import static com.project.bot.BotCallbacks.ADD_LINK;
 import static com.project.bot.BotCallbacks.BACK;
@@ -30,11 +29,10 @@ public class VideoStatsBot {
     public VideoStatsBot(
             TelegramBot bot,
             UrlResolver urlResolver,
-            StatisticsService statisticsService,
             TelegramUserWhitelist userWhitelist) {
         this.bot = bot;
         this.userWhitelist = userWhitelist;
-        this.addLinks = new AddLinks(bot, urlResolver, statisticsService, this::sendStartDialog);
+        this.addLinks = new AddLinks(bot, urlResolver, this::sendStartDialog);
         this.updateLinks = new RefreshStatsLinks(bot);
         this.listLinks = new ListLinks(bot);
     }
@@ -49,8 +47,6 @@ public class VideoStatsBot {
         System.out.println("📨 Получено обновлений: " + updates.size());
 
         for (Update update : updates) {
-            System.out.println("Обработка update: " + update);
-
             Long userId = extractTelegramUserId(update);
             System.out.println("User ID: " + userId);
 
@@ -96,8 +92,6 @@ public class VideoStatsBot {
                 } else {
                     System.out.println("⚠️ Неизвестный callback: " + data);
                 }
-            } else {
-                System.out.println("ℹ️ Другое обновление (не сообщение и не callback)");
             }
         }
 

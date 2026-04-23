@@ -1,32 +1,59 @@
 package com.project.service;
 
-import com.project.model.VideoStats;
-
-import java.util.Optional;
-
-// Загрузка метаданных с YouTube через Data API (без сохранения в БД).
+// Бизнес-логика: получение статистики с YouTube,
+// сохранение в БД, расчёт суммарных просмотров
 
 public class StatisticsService {
+    private final String videoUrl;
+    private final String videoId;
+    private final YouTubeClient youTubeClient;
 
-    /**
-     * Запрашивает YouTube Data API: название и число просмотров.
-     *
-     * @return заполненный {@link VideoStats} (url, platform, title, views) или пусто при ошибке
-     */
-    public Optional<VideoStats> fetchYoutubeStats(String videoUrl) {
-        try {
-            YouTubeClient client = new YouTubeClient(videoUrl);
-            YouTubeClient.VideoInfo info = client.fetchVideoInfo();
-
-            VideoStats stats = new VideoStats();
-            stats.setVideoUrl(videoUrl);
-            stats.setPlatform("YouTube");
-            stats.setTitle(info.title());
-            stats.setViewCount(info.viewCount());
-            return Optional.of(stats);
-        } catch (Exception e) {
-            System.err.println("Ошибка YouTube API: " + e.getMessage());
-            return Optional.empty();
+    public StatisticsService(String videoUrl) throws YouTubeException {
+        if (videoUrl == null || videoUrl.trim().isEmpty()) {
+            throw new YouTubeException("URL видео не может быть пустым");
         }
+        this.videoUrl = videoUrl;
+        this.videoId = extractVideoId(videoUrl);
+
+        if (this.videoId == null || this.videoId.trim().isEmpty()) {
+            throw new YouTubeException("Не удалось извлечь ID видео из URL: " + videoUrl);
+        }
+
+        this.youTubeClient = new YouTubeClient();
+    }
+
+    //Метод извлечения ID из ссылки
+    private String extractVideoId(String videoUrl) {
+        String videoId = null;
+
+        if (videoUrl.contains("youtu.be/")) {
+            videoId = videoUrl.substring(videoUrl.lastIndexOf("/") + 1);
+            if (videoId.contains("?")) {
+                videoId = videoId.split("\\?") [0];
+            }
+        } else if (videoUrl.contains("v=")) {
+            videoId = videoUrl.split("v=") [1];
+            if (videoId.contains("&")) {
+                videoId = videoId.split("&") [0];
+            }
+        }
+
+        return videoId;
+    }
+
+    public long getViewCount() throws YouTubeException {
+        return youTubeClient.getViewCountByVideoId(videoId);
+    }
+
+    public String getTitle() throws YouTubeException {
+        return youTubeClient.getTitleByVideoId(videoId);
+    }
+
+    public String getVideoUrl() {
+        return videoUrl;
+    }
+
+    public String getVideoId() {
+        return videoId;
     }
 }
