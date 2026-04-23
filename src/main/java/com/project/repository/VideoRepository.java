@@ -105,6 +105,24 @@ public class VideoRepository {
         return 0;
     }
 
+    // SELECT (количество всех ссылок) - НОВЫЙ МЕТОД
+    public int getTotalLinks() {
+        String sql = "SELECT COUNT(*) as total FROM videos";
+
+        try (Connection conn = DbConnection.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            if (rs.next()) {
+                return rs.getInt("total");
+            }
+
+        } catch (SQLException e) {
+            System.err.println("Ошибка подсчёта количества ссылок: " + e.getMessage());
+        }
+        return 0;
+    }
+
     // DELETE (удалить видео по ссылке)
     public void deleteByUrl(String videoUrl) {
         String sql = "DELETE FROM videos WHERE link = ?";

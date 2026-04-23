@@ -3,6 +3,7 @@ package com.project.bot;
 import com.pengrad.telegrambot.TelegramBot;
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
+import com.pengrad.telegrambot.model.request.ParseMode;
 import com.pengrad.telegrambot.request.AnswerCallbackQuery;
 import com.pengrad.telegrambot.request.SendMessage;
 import com.project.model.VideoStats;
@@ -36,24 +37,36 @@ public class ListLinks {
             return;
         }
 
-        // Формируем сообщение со списком
-        StringBuilder message = new StringBuilder("📋 СПИСОК ССЫЛОК:\n\n");
+        // Формируем сообщение со списком в нужном формате
+        StringBuilder message = new StringBuilder();
 
         for (int i = 0; i < videos.size(); i++) {
             VideoStats video = videos.get(i);
             message.append(i + 1).append(". ");
             message.append(video.getTitle()).append("\n");
-            message.append("   📊 Просмотров: ").append(video.getViewCount()).append("\n");
-            message.append("   🔗 Ссылка: ").append(video.getVideoUrl()).append("\n");
-            message.append("   🕐 Обновлено: ").append(video.getLastUpdated()).append("\n\n");
+            // Гиперссылка: слово "Ссылка" ведёт на URL
+            message.append("   <a href=\"").append(video.getVideoUrl()).append("\">Ссылка</a>\n");
+            message.append("   Просмотров: ").append(video.getViewCount()).append("\n\n");
         }
+
+        // Общая статистика
+        int totalLinks = videos.size();
+        long totalViews = videoRepository.getTotalViews();
+        message.append("Общее количество видео: ").append(totalLinks).append("\n");
+        message.append("Общее количество просмотров: ").append(totalViews);
 
         // Добавляем кнопку "Вернуться"
         InlineKeyboardButton backButton = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
         InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(backButton);
 
         System.out.println("📨 Отправляем сообщение со списком и кнопкой возврата...");
-        bot.execute(new SendMessage(chatId, message.toString()).replyMarkup(keyboard));
+
+        // Отправляем с HTML разметкой
+        SendMessage request = new SendMessage(chatId, message.toString());
+        request.parseMode(ParseMode.HTML);
+        request.replyMarkup(keyboard);
+        bot.execute(request);
+
         System.out.println("✅ Сообщение отправлено");
     }
 }
