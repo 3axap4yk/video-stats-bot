@@ -64,6 +64,7 @@ public class ListLinks {
         // Отправляем с HTML разметкой
         SendMessage request = new SendMessage(chatId, message.toString());
         request.parseMode(ParseMode.HTML);
+        request.disableWebPagePreview(true);  // ← ДОБАВИТЬ ЭТУ СТРОКУ
         request.replyMarkup(keyboard);
         bot.execute(request);
 
