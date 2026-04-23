@@ -1,2 +1,13 @@
 # Запуск приложения и базы данных PostgreSQL в контейнерах
 # Команда для запуска: docker compose up --build
+services:
+  backend:
+    build: .
+    container_name: video_stats_backend
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    command: ["sleep", "infinity"]
+    # command: ["java", "-jar", "app.jar"]
