@@ -1,6 +1,7 @@
 package com.project.bot;
 
 import com.pengrad.telegrambot.TelegramBot;
+import com.pengrad.telegrambot.model.request.ParseMode;
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 import com.pengrad.telegrambot.request.AnswerCallbackQuery;
@@ -66,9 +67,10 @@ public class ListLinks {
         for (int i = 0; i < videos.size(); i++) {
             VideoStats video = videos.get(i);
             message.append(i + 1).append(". ");
-            message.append(video.getTitle()).append("\n");
+            // Сообщение отправляем в HTML-режиме, поэтому экранируем пользовательские/внешние данные.
+            message.append(escapeHtml(video.getTitle())).append("\n");
             message.append("   📊 Просмотров: ").append(formatViewCount(video.getViewCount())).append("\n");
-            message.append("   🔗 Ссылка: ").append(video.getVideoUrl()).append("\n");
+            message.append("   🔗 Ссылка: ").append(formatLink(video.getVideoUrl())).append("\n");
             message.append("   🕐 Обновлено: ").append(formatUpdatedAt(video.getLastUpdated())).append("\n\n");
         }
 
@@ -78,6 +80,8 @@ public class ListLinks {
 
         System.out.println("📨 Отправляем сообщение со списком и кнопкой возврата...");
         bot.execute(new SendMessage(chatId, message.toString())
+                // Нужен HTML, чтобы показать ссылку как кликабельное слово “перейти”.
+                .parseMode(ParseMode.HTML)
                 // Отключаем автогенерацию карточек/превью для ссылок в списке (иначе Telegram выберет одну из URL).
                 .disableWebPagePreview(true)
                 .replyMarkup(keyboard));
@@ -93,5 +97,31 @@ public class ListLinks {
             return "—";
         }
         return UPDATED_AT_FORMAT.format(lastUpdated);
+    }
+
+    /**
+     * Делает URL “кликабельным словом”, не засоряя сообщение длинными ссылками.
+     * Telegram воспринимает ссылку в HTML как <a href="...">text</a>.
+     */
+    private static String formatLink(String url) {
+        if (url == null || url.isBlank()) {
+            return "—";
+        }
+        return "<a href=\"" + escapeHtmlAttribute(url) + "\">перейти</a>";
+    }
+
+    /** Минимальное экранирование для HTML-текста. */
+    private static String escapeHtml(String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
+    }
+
+    /** Экранирование для значения атрибута в HTML (href="..."). */
+    private static String escapeHtmlAttribute(String s) {
+        return escapeHtml(s).replace("\"", "&quot;");
     }
 }
