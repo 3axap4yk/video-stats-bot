@@ -22,6 +22,10 @@ dependencies {
 
     // Telegram Bot API (pengrad) — используется в com.pengrad.telegrambot.*
     implementation 'com.github.pengrad:java-telegram-bot-api:7.4.0'
+
+    // JUnit для тестов
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 application {
@@ -31,4 +35,22 @@ application {
 java {
     sourceCompatibility = '17'
     targetCompatibility = '17'
+}
+
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    manifest {
+        attributes(
+                'Main-Class': 'com.project.App'
+        )
+    }
+
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+test {
+    useJUnitPlatform()
 }
