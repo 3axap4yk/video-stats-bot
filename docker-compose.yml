@@ -3,11 +3,10 @@
 services:
   backend:
     build: .
-    container_name: video_stats_backend
+    container_name: video_stats_bot
     restart: unless-stopped
 
     env_file:
       - .env
-
-    command: ["sleep", "infinity"]
-    # command: ["java", "-jar", "app.jar"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
