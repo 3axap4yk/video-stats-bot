@@ -130,6 +130,7 @@ public class AddLinks {
             stats.setPlatform("YouTube");
             stats.setTitle(title);
             stats.setViewCount(viewCount);
+            stats.setHostingUnavailable(false);  // НОВОЕ ВИДЕО - ПЛАТФОРМА ДОСТУПНА
 
             InlineKeyboardButton backBtn = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
             InlineKeyboardMarkup backKeyboard = new InlineKeyboardMarkup(backBtn);
