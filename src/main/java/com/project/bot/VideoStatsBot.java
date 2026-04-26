@@ -72,17 +72,18 @@ public class VideoStatsBot {
                 String data = update.callbackQuery().data();
                 long chatId = update.callbackQuery().message().chat().id();
                 String callbackQueryId = update.callbackQuery().id();
+                int messageId = update.callbackQuery().message().messageId();
                 System.out.println("🔘 Callback получен: data=" + data + ", chatId=" + chatId);
 
                 if (ADD_LINK.equals(data)) {
-                    System.out.println("➕ Обработка ADD_LINK");
+                    System.out.println("➡ Обработка ADD_LINK");
                     addLinks.onAddLinkClick(chatId, callbackQueryId);
                 } else if (LINKS_LIST.equals(data)) {
                     System.out.println("📋 Обработка LINKS_LIST");
                     listLinks.onClick(chatId, callbackQueryId);
                 } else if (REFRESH_STATS.equals(data)) {
                     System.out.println("🔄 Обработка REFRESH_STATS");
-                    updateLinks.onClick(chatId, callbackQueryId);
+                    updateLinks.onClick(chatId, callbackQueryId, messageId);
                 } else if (CANCEL.equals(data)) {
                     System.out.println("❌ Обработка CANCEL");
                     addLinks.onCancel(chatId, callbackQueryId);

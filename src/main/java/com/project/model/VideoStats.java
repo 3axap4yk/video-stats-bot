@@ -42,6 +42,8 @@ public class VideoStats {
         return viewCount;
     }
 
+    //public long getID() {return }
+
     public LocalDateTime getLastUpdated() {
         return lastUpdated;
     }
