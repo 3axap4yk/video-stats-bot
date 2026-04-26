@@ -23,6 +23,10 @@ dependencies {
     // Telegram Bot API (pengrad) — используется в com.pengrad.telegrambot.*
     implementation 'com.github.pengrad:java-telegram-bot-api:7.4.0'
 
+    // Jackson для парсеров
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+
+
     // JUnit для тестов
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
