@@ -4,7 +4,6 @@ import com.pengrad.telegrambot.TelegramBot;
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 import com.pengrad.telegrambot.request.AnswerCallbackQuery;
-import com.pengrad.telegrambot.request.EditMessageText;
 import com.pengrad.telegrambot.request.SendMessage;
 import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
@@ -14,7 +13,6 @@ import com.project.service.YouTubeException;
 import java.util.List;
 
 import static com.project.bot.BotCallbacks.BACK;
-import static com.project.bot.BotCallbacks.LINKS_LIST;
 import static com.project.bot.BotMessages.BTN_BACK;
 
 public class RefreshStatsLinks {
@@ -27,13 +25,9 @@ public class RefreshStatsLinks {
     }
 
     public void onClick(long chatId, String callbackQueryId, int messageId) {
-        // Отвечаем на callback, чтобы убрать "часики" у кнопки
         bot.execute(new AnswerCallbackQuery(callbackQueryId));
-
-        // Отправляем сообщение о начале обновления
         bot.execute(new SendMessage(chatId, "🔄 Обновляю статистику всех видео... Это может занять несколько секунд."));
 
-        // Получаем все видео из БД
         List<VideoStats> videos = videoRepository.findAll();
 
         if (videos.isEmpty()) {
@@ -45,32 +39,32 @@ public class RefreshStatsLinks {
         int errorCount = 0;
         long totalViews = 0;
 
-        // Обновляем каждое видео
         for (VideoStats video : videos) {
             try {
                 StatisticsService statsService = new StatisticsService(video.getVideoUrl());
                 long newViewCount = statsService.getViewCount();
                 String newTitle = statsService.getTitle();
 
-                // Обновляем данные
                 video.setViewCount(newViewCount);
                 video.setTitle(newTitle);
-                videoRepository.save(video); // save обновит существующую запись
+                video.setHostingUnavailable(false);  // СБРАСЫВАЕМ флаг при успешном обновлении
+                videoRepository.save(video);
 
                 updatedCount++;
                 totalViews += newViewCount;
-
-                // Небольшая задержка, чтобы не превысить лимиты API
                 Thread.sleep(200);
 
             } catch (YouTubeException | InterruptedException e) {
                 errorCount++;
                 System.err.println("Ошибка обновления: " + video.getVideoUrl() + " - " + e.getMessage());
-                totalViews += video.getViewCount(); // используем старые просмотры
+                totalViews += video.getViewCount();
+
+                // ОТМЕЧАЕМ видео как недоступное
+                video.setHostingUnavailable(true);
+                videoRepository.save(video);
             }
         }
 
-        // Формируем результат
         String resultMessage = String.format(
                 "✅ Обновление завершено!\n\n" +
                         "📊 Статистика:\n" +
@@ -82,8 +76,6 @@ public class RefreshStatsLinks {
         );
 
         bot.execute(new SendMessage(chatId, resultMessage));
-
-        // Отправляем обновлённый список (опционально)
         sendUpdatedList(chatId);
     }
 
@@ -96,11 +88,17 @@ public class RefreshStatsLinks {
 
         StringBuilder message = new StringBuilder("📋 **Обновлённый список видео:**\n\n");
 
-        for (int i = 0; i < Math.min(videos.size(), 10); i++) { // показываем первые 10
+        for (int i = 0; i < Math.min(videos.size(), 10); i++) {
             VideoStats video = videos.get(i);
             message.append(i + 1).append(". ");
             message.append(escapeMarkdown(video.getTitle())).append("\n");
-            message.append("   👁️ Просмотров: ").append(String.format("%,d", video.getViewCount())).append("\n\n");
+            message.append("   👁️ Просмотров: ").append(String.format("%,d", video.getViewCount()));
+
+            // ДОБАВЛЯЕМ индикатор недоступности
+            if (video.isHostingUnavailable()) {
+                message.append(" ⚠️ *Платформа временно недоступна*");
+            }
+            message.append("\n\n");
         }
 
         if (videos.size() > 10) {

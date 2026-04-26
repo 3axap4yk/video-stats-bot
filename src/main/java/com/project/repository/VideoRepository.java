@@ -5,19 +5,18 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
-// JDBC-методы для работы с базой данных:
-// INSERT (сохранение статистики видео), SELECT (получение списка)
-
 public class VideoRepository {
 
-    // INSERT (сохранить статистику видео)
+    // INSERT/UPDATE с hosting_unavailable
     public void save(VideoStats stats) {
         String sql = """
-            INSERT INTO videos (link, platform, title, views_count, last_updated)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            INSERT INTO videos (link, platform, title, views_count, last_updated, hosting_unavailable)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
             ON CONFLICT (link) DO UPDATE SET
                 views_count = EXCLUDED.views_count,
-                last_updated = CURRENT_TIMESTAMP
+                title = EXCLUDED.title,
+                last_updated = CURRENT_TIMESTAMP,
+                hosting_unavailable = EXCLUDED.hosting_unavailable
         """;
 
         try (Connection conn = DbConnection.getConnection();
@@ -27,6 +26,7 @@ public class VideoRepository {
             pstmt.setString(2, stats.getPlatform());
             pstmt.setString(3, stats.getTitle());
             pstmt.setLong(4, stats.getViewCount());
+            pstmt.setBoolean(5, stats.isHostingUnavailable());
 
             pstmt.executeUpdate();
             System.out.println("Сохранено в БД: " + stats.getVideoUrl());
@@ -36,7 +36,7 @@ public class VideoRepository {
         }
     }
 
-    // SELECT (найти статистику по ссылке)
+    // SELECT с hosting_unavailable
     public VideoStats findByUrl(String videoUrl) {
         String sql = "SELECT * FROM videos WHERE link = ?";
 
@@ -52,7 +52,8 @@ public class VideoRepository {
                 stats.setPlatform(rs.getString("platform"));
                 stats.setTitle(rs.getString("title"));
                 stats.setViewCount(rs.getLong("views_count"));
-                stats.setLastUpdated(rs.getString("last_updated"));
+                stats.setLastUpdated(rs.getTimestamp("last_updated").toLocalDateTime());
+                stats.setHostingUnavailable(rs.getBoolean("hosting_unavailable"));
                 return stats;
             }
 
@@ -62,7 +63,7 @@ public class VideoRepository {
         return null;
     }
 
-    // SELECT (получить все видео)
+    // SELECT ALL с hosting_unavailable
     public List<VideoStats> findAll() {
         List<VideoStats> list = new ArrayList<>();
         String sql = "SELECT * FROM videos ORDER BY last_updated DESC";
@@ -77,7 +78,8 @@ public class VideoRepository {
                 stats.setPlatform(rs.getString("platform"));
                 stats.setTitle(rs.getString("title"));
                 stats.setViewCount(rs.getLong("views_count"));
-                stats.setLastUpdated(rs.getString("last_updated"));
+                stats.setLastUpdated(rs.getTimestamp("last_updated").toLocalDateTime());
+                stats.setHostingUnavailable(rs.getBoolean("hosting_unavailable"));
                 list.add(stats);
             }
 
@@ -87,7 +89,7 @@ public class VideoRepository {
         return list;
     }
 
-    // SELECT (сумма всех просмотров)
+    // Остальные методы (getTotalViews, getTotalLinks, deleteByUrl) остаются без изменений
     public long getTotalViews() {
         String sql = "SELECT SUM(views_count) as total FROM videos";
 
@@ -100,12 +102,11 @@ public class VideoRepository {
             }
 
         } catch (SQLException e) {
-            System.err.println("Ошибка подсчета: " + e.getMessage());
+            System.err.println("Ошибка подсчёта: " + e.getMessage());
         }
         return 0;
     }
 
-    // SELECT (количество всех ссылок) - НОВЫЙ МЕТОД
     public int getTotalLinks() {
         String sql = "SELECT COUNT(*) as total FROM videos";
 
@@ -123,7 +124,6 @@ public class VideoRepository {
         return 0;
     }
 
-    // DELETE (удалить видео по ссылке)
     public void deleteByUrl(String videoUrl) {
         String sql = "DELETE FROM videos WHERE link = ?";
 

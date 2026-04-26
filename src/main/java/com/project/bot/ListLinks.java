@@ -37,34 +37,35 @@ public class ListLinks {
             return;
         }
 
-        // Формируем сообщение со списком в нужном формате
         StringBuilder message = new StringBuilder();
 
         for (int i = 0; i < videos.size(); i++) {
             VideoStats video = videos.get(i);
             message.append(i + 1).append(". ");
             message.append(video.getTitle()).append("\n");
-            // Гиперссылка: слово "Ссылка" ведёт на URL
             message.append("   <a href=\"").append(video.getVideoUrl()).append("\">Ссылка</a>\n");
-            message.append("   Просмотров: ").append(video.getViewCount()).append("\n\n");
+            message.append("   👁️ Просмотров: ").append(video.getViewCount());
+
+            // ДОБАВЛЯЕМ индикатор недоступности
+            if (video.isHostingUnavailable()) {
+                message.append(" ⚠️ Платформа временно недоступна");
+            }
+            message.append("\n\n");
         }
 
-        // Общая статистика
         int totalLinks = videos.size();
         long totalViews = videoRepository.getTotalViews();
         message.append("Общее количество видео: ").append(totalLinks).append("\n");
         message.append("Общее количество просмотров: ").append(totalViews);
 
-        // Добавляем кнопку "Вернуться"
         InlineKeyboardButton backButton = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
         InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(backButton);
 
         System.out.println("📨 Отправляем сообщение со списком и кнопкой возврата...");
 
-        // Отправляем с HTML разметкой
         SendMessage request = new SendMessage(chatId, message.toString());
         request.parseMode(ParseMode.HTML);
-        request.disableWebPagePreview(true);  // ← ДОБАВИТЬ ЭТУ СТРОКУ
+        request.disableWebPagePreview(true);
         request.replyMarkup(keyboard);
         bot.execute(request);
 
