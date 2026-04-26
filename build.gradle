@@ -26,7 +26,6 @@ dependencies {
     // Jackson для парсеров
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
 
-
     // JUnit для тестов
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -58,3 +57,25 @@ jar {
 test {
     useJUnitPlatform()
 }
+
+// ========== ДОБАВИТЬ ЭТО ==========
+compileJava {
+    options.encoding = 'UTF-8'
+}
+
+compileTestJava {
+    options.encoding = 'UTF-8'
+}
+
+javadoc {
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(JavaExec) {
+    systemProperty 'file.encoding', 'UTF-8'
+}
+
+application {
+    applicationDefaultJvmArgs = ['-Dfile.encoding=UTF-8']
+}
+// ==================================
