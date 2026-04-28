@@ -12,6 +12,8 @@ import com.project.repository.VideoRepository;
 import com.project.service.StatisticsService;
 import com.project.service.YouTubeException;
 
+import java.text.NumberFormat;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongConsumer;
@@ -130,20 +132,21 @@ public class AddLinks {
             stats.setPlatform("YouTube");
             stats.setTitle(title);
             stats.setViewCount(viewCount);
+            stats.setHostingUnavailable(false);  // НОВОЕ ВИДЕО - ПЛАТФОРМА ДОСТУПНА
 
             InlineKeyboardButton backBtn = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
             InlineKeyboardMarkup backKeyboard = new InlineKeyboardMarkup(backBtn);
 
             VideoStats existing = videoRepository.findByUrl(stats.getVideoUrl());
             if (existing != null) {
-                String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), stats.getViewCount(), stats.getPlatform())
+                String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
                         + "\n\nЭта ссылка уже добавлена.";
                 bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
                 return;
             }
 
             videoRepository.save(stats);
-            String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), stats.getViewCount(), stats.getPlatform())
+            String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
                     + "\n\nСсылка добавлена.";
             bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
         } finally {
@@ -169,5 +172,10 @@ public class AddLinks {
     private InlineKeyboardMarkup buildCancelKeyboard() {
         InlineKeyboardButton cancelBtn = new InlineKeyboardButton(BTN_CANCEL).callbackData(CANCEL);
         return new InlineKeyboardMarkup(cancelBtn);
+    }
+
+    private static String formatViews(long views) {
+        String formatted = NumberFormat.getInstance(new Locale("ru", "RU")).format(views);
+        return formatted.replace('\u00A0', ' ');
     }
 }

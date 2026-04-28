@@ -1,5 +1,7 @@
 package com.project.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.github.cdimascio.dotenv.Dotenv;
 
 import java.net.ConnectException;
@@ -8,6 +10,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 // HTTP-запросы к YouTube Data API v3
 // Парсинг JSON-ответа
@@ -15,22 +19,86 @@ import java.net.http.HttpResponse;
 public class YouTubeClient {
     private final String apiKey;
     private final HttpClient httpClient;
+    private final ObjectMapper objectMapper;
+    private final Map<String, JsonNode> responseCache;
 
     public YouTubeClient() throws YouTubeException {
-            this.apiKey = loadApiKey();
-            this.httpClient = HttpClient.newHttpClient();
+        this.apiKey = loadApiKey();
+        this.httpClient = HttpClient.newHttpClient();
+        this.objectMapper = new ObjectMapper();
+        this.responseCache = new ConcurrentHashMap<>();
     }
 
     //Получение просмотров
     public long getViewCountByVideoId(String videoId) throws YouTubeException {
-        String jsonResponse = sendRequest(videoId);
-        return parseViewCount(jsonResponse, videoId);
+        JsonNode root = getVideoInfo(videoId);
+
+        try {
+            JsonNode items = root.get("items");
+            if (items == null || items.isEmpty()) {
+                throw new YouTubeException("Видео с ID '" + videoId + "' не найдено");
+            }
+
+            JsonNode statistics = items.get(0).get("statistics");
+            if (statistics == null || !statistics.has("viewCount")) {
+                throw new YouTubeException("viewCount не найден для видео " + videoId);
+            }
+
+            return statistics.get("viewCount").asLong();
+        } catch (YouTubeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new YouTubeException("Ошибка парсинга viewCount: " + e.getMessage(), e);
+        }
     }
 
     //Получение названия
     public String getTitleByVideoId(String videoId) throws YouTubeException {
+        JsonNode root = getVideoInfo(videoId);
+
+        try {
+            JsonNode items = root.get("items");
+            if (items == null || items.isEmpty()) {
+                throw new YouTubeException("Видео с ID '" + videoId + "' не найдено");
+            }
+
+            JsonNode snippet = items.get(0).get("snippet");
+            if (snippet == null || !snippet.has("title")) {
+                throw new YouTubeException("title не найден для видео " + videoId);
+            }
+
+            return snippet.get("title").asText();
+        } catch (YouTubeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new YouTubeException("Ошибка парсинга title: " + e.getMessage(), e);
+        }
+    }
+
+    //Общий метод получения данных видео(с кэшированием)
+    private JsonNode getVideoInfo(String videoId) throws YouTubeException {
+        if (responseCache.containsKey(videoId)) {
+            return responseCache.get(videoId);
+        }
+
         String jsonResponse = sendRequest(videoId);
-        return parseTitle(jsonResponse, videoId);
+
+        try {
+            JsonNode root = objectMapper.readTree(jsonResponse);
+            responseCache.put(videoId, root);
+            return root;
+        } catch (Exception e) {
+            throw new YouTubeException("Ошибка парсинга JSON ответа: " + e.getMessage(), e);
+        }
+    }
+
+    //Очистка кэша
+    public void clearCache() {
+        responseCache.clear();
+    }
+
+    public void clearCacheForVideo(String videoId) {
+        responseCache.remove(videoId);
     }
 
     //Загрузка API из .env
@@ -111,63 +179,5 @@ public class YouTubeClient {
         } catch (Exception e) {
             throw new YouTubeException("Неизвестная ошибка" + e.getMessage(), e);
         }
-    }
-
-    // Парсинг просмотров из JSON
-    private long parseViewCount(String json, String videoId) throws YouTubeException {
-        // Ищем viewCount в JSON ответе
-        String searchPattern = "\"viewCount\":";
-        int startIndex = json.indexOf(searchPattern);
-
-        if (startIndex != -1) {
-            startIndex += searchPattern.length();
-
-            // Пропускаем пробелы
-            while (startIndex < json.length() && json.charAt(startIndex) == ' ') {
-                startIndex++;
-            }
-
-            // Если значение в кавычках
-            if (json.charAt(startIndex) == '"') {
-                startIndex++;
-                int endIndex = json.indexOf("\"", startIndex);
-                return Long.parseLong(json.substring(startIndex, endIndex));
-            }
-            // Если значение без кавычек
-            else {
-                int endIndex = json.indexOf(",", startIndex);
-                if (endIndex == -1) {
-                    endIndex = json.indexOf("}", startIndex);
-                }
-                return Long.parseLong(json.substring(startIndex, endIndex).trim());
-            }
-        }
-
-        throw new YouTubeException("Не удалось найти viewCount в ответе API для видео " + videoId);
-    }
-
-    //Парсинг названия из JSON
-    private String parseTitle(String json, String videoId) throws YouTubeException {
-        // Ищем title в JSON ответе
-        String searchPattern = "\"title\":";
-        int startIndex = json.indexOf(searchPattern);
-
-        if (startIndex != -1) {
-            startIndex += searchPattern.length();
-
-            // Пропускаем пробелы
-            while (startIndex < json.length() && json.charAt(startIndex) == ' ') {
-                startIndex++;
-            }
-
-            // Название всегда в кавычках
-            if (json.charAt(startIndex) == '"') {
-                startIndex++;
-                int endIndex = json.indexOf("\"", startIndex);
-                return json.substring(startIndex, endIndex);
-            }
-        }
-
-        throw new YouTubeException("Не удалось найти title в ответе API для видео " + videoId);
     }
 }
