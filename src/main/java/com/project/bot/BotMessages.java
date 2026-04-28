@@ -9,7 +9,7 @@ public final class BotMessages {
     public static final String DEAD_LINK = "Отправленная Вами ссылка никуда не ведет. Проверьте и попробуйте добавить снова";
     public static final String INVALID_URL = "Некорректная ссылка. Проверьте формат URL и попробуйте снова.";
     public static final String UNSUPPORTED_PLATFORM = "Платформа не поддерживается. Доступны YouTube и VK. Проверьте ссылку и попробуйте ещё раз.";
-    public static final String VIDEO_STATS_TEMPLATE = "Название: %s\nПросмотры: %d\nПлатформа: %s";
+    public static final String VIDEO_STATS_TEMPLATE = "Название: %s\nПросмотры: %s\nПлатформа: %s";
     /** Временное сообщение на время запроса к YouTube; затем удаляется из чата. */
     public static final String REQUEST_IN_PROGRESS = "Выполняю запрос…";
     public static final String YOUTUBE_API_FAILED = "Не удалось получить данные с YouTube (API или сеть). Попробуйте ещё раз позже.";

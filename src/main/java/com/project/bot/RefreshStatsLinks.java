@@ -10,7 +10,9 @@ import com.project.repository.VideoRepository;
 import com.project.service.StatisticsService;
 import com.project.service.YouTubeException;
 
+import java.text.NumberFormat;
 import java.util.List;
+import java.util.Locale;
 
 import static com.project.bot.BotCallbacks.BACK;
 import static com.project.bot.BotMessages.BTN_BACK;
@@ -41,6 +43,14 @@ public class RefreshStatsLinks {
 
         for (VideoStats video : videos) {
             try {
+                if (!isYouTube(video)) {
+                    errorCount++;
+                    totalViews += video.getViewCount();
+                    video.setHostingUnavailable(true);
+                    videoRepository.save(video);
+                    continue;
+                }
+
                 StatisticsService statsService = new StatisticsService(video.getVideoUrl());
                 long newViewCount = statsService.getViewCount();
                 String newTitle = statsService.getTitle();
@@ -71,8 +81,8 @@ public class RefreshStatsLinks {
                         "• Обновлено успешно: %d\n" +
                         "• С ошибками: %d\n" +
                         "• Всего видео: %d\n" +
-                        "• Суммарные просмотры: %,d",
-                updatedCount, errorCount, videos.size(), totalViews
+                        "• Суммарные просмотры: %s",
+                updatedCount, errorCount, videos.size(), formatViews(totalViews)
         );
 
         bot.execute(new SendMessage(chatId, resultMessage));
@@ -86,30 +96,31 @@ public class RefreshStatsLinks {
             return;
         }
 
-        StringBuilder message = new StringBuilder("📋 **Обновлённый список видео:**\n\n");
+        StringBuilder message = new StringBuilder("📋 <b>Обновлённый список видео:</b>\n\n");
 
         for (int i = 0; i < Math.min(videos.size(), 10); i++) {
             VideoStats video = videos.get(i);
             message.append(i + 1).append(". ");
-            message.append(escapeMarkdown(video.getTitle())).append("\n");
-            message.append("   👁️ Просмотров: ").append(String.format("%,d", video.getViewCount()));
+            message.append("<b>").append(escapeHtml(video.getTitle())).append("</b>").append("\n");
+            message.append("   👁️ Просмотров: ").append(formatViews(video.getViewCount()));
 
             // ДОБАВЛЯЕМ индикатор недоступности
             if (video.isHostingUnavailable()) {
-                message.append(" ⚠️ *Платформа временно недоступна*");
+                message.append(" ⚠️ Платформа временно недоступна");
             }
             message.append("\n\n");
         }
 
         if (videos.size() > 10) {
-            message.append("_И ещё ").append(videos.size() - 10).append(" видео..._");
+            message.append("И ещё ").append(videos.size() - 10).append(" видео...");
         }
 
         InlineKeyboardButton backButton = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
         InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(backButton);
 
         bot.execute(new SendMessage(chatId, message.toString())
-                .parseMode(com.pengrad.telegrambot.model.request.ParseMode.Markdown)
+                .parseMode(com.pengrad.telegrambot.model.request.ParseMode.HTML)
+                .disableWebPagePreview(true)
                 .replyMarkup(keyboard));
     }
 
@@ -132,5 +143,33 @@ public class RefreshStatsLinks {
                 .replace("}", "\\}")
                 .replace(".", "\\.")
                 .replace("!", "\\!");
+    }
+
+    private static String escapeHtml(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
+    }
+
+    private static String formatViews(long views) {
+        String formatted = NumberFormat.getInstance(new Locale("ru", "RU")).format(views);
+        return formatted.replace('\u00A0', ' ');
+    }
+
+    private static boolean isYouTube(VideoStats video) {
+        if (video == null) {
+            return false;
+        }
+        String platform = video.getPlatform();
+        if (platform == null) {
+            return false;
+        }
+        return platform.toLowerCase(Locale.ROOT).contains("youtube");
     }
 }
