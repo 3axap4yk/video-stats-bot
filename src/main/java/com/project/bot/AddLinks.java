@@ -38,6 +38,7 @@ public class AddLinks {
     private final LongConsumer showStartDialog;
     private final VideoRepository videoRepository = new VideoRepository();
 
+    // Множество chatId, ожидающих ввода URL (thread-safe)
     private final Set<Long> chatsAwaitingUrl = ConcurrentHashMap.newKeySet();
 
     public AddLinks(
@@ -79,6 +80,8 @@ public class AddLinks {
     }
 
     public void onSubmittedUrl(long chatId, String rawUrl) {
+
+        // Нормализация URL: trim + удаление внутренних пробелов
         String normalizedUrl = rawUrl == null ? "" : rawUrl.trim();
         normalizedUrl = normalizedUrl.replaceAll("\\s+", "");
 
@@ -107,6 +110,8 @@ public class AddLinks {
         try {
             StatisticsService statsService;
             try {
+
+                // Инициализация сервиса статистики; YouTubeException — ошибка конфигурации/API-ключа
                 statsService = new StatisticsService(normalizedUrl);
             } catch (YouTubeException e) {
                 System.err.println("Ошибка создания StatisticsService: " + e.getMessage());
@@ -132,11 +137,12 @@ public class AddLinks {
             stats.setPlatform("YouTube");
             stats.setTitle(title);
             stats.setViewCount(viewCount);
-            stats.setHostingUnavailable(false);  // НОВОЕ ВИДЕО - ПЛАТФОРМА ДОСТУПНА
+            stats.setHostingUnavailable(false);  // Новое видео — платформа заведомо доступна
 
             InlineKeyboardButton backBtn = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
             InlineKeyboardMarkup backKeyboard = new InlineKeyboardMarkup(backBtn);
 
+            // Проверка: ссылка уже есть в БД — сохранение не выполняем
             VideoStats existing = videoRepository.findByUrl(stats.getVideoUrl());
             if (existing != null) {
                 String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
@@ -154,6 +160,7 @@ public class AddLinks {
         }
     }
 
+    // Отправляет сообщение-заглушку "в процессе" и возвращает его messageId для последующего удаления
     private Integer sendProgressMessage(long chatId) {
         SendResponse response = bot.execute(new SendMessage(chatId, REQUEST_IN_PROGRESS));
         if (response.isOk() && response.message() != null) {
@@ -162,6 +169,7 @@ public class AddLinks {
         return null;
     }
 
+    // Удаляет сообщение-заглушку после получения результата (или при ошибке — через finally)
     private void deleteMessageIfPresent(long chatId, Integer messageId) {
         if (messageId == null) {
             return;
@@ -174,6 +182,8 @@ public class AddLinks {
         return new InlineKeyboardMarkup(cancelBtn);
     }
 
+    // Форматирует число просмотров (1 234 567),
+    // заменяет неразрывный пробел \u00A0 на обычный для корректного отображения в Telegram
     private static String formatViews(long views) {
         String formatted = NumberFormat.getInstance(new Locale("ru", "RU")).format(views);
         return formatted.replace('\u00A0', ' ');
