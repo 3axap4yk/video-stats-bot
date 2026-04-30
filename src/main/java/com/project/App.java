@@ -37,6 +37,8 @@ public class App {
             System.err.println("⚠️ БД недоступна, бот будет работать без сохранения данных");
         } else {
             System.out.println("✅ БД доступна");
+
+            DbConnection.initDatabase(); // инициализация таблицы при первом запуске
         }
 
         TelegramBot bot = new TelegramBot(botToken);

@@ -4,6 +4,7 @@ import io.github.cdimascio.dotenv.Dotenv;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.Statement;
 
 // Установление подключения к PostgreSQL через JDBC
 // Создание DataSource для управления соединениями
@@ -122,6 +123,28 @@ public class DbConnection {
             System.out.println("   4. Неверный пароль");
             System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             e.printStackTrace();
+        }
+    }
+    public static void initDatabase() {
+        String sql = """
+        CREATE TABLE IF NOT EXISTS videos (
+            id SERIAL PRIMARY KEY,
+            link TEXT NOT NULL UNIQUE,
+            platform VARCHAR(50),
+            title TEXT,
+            views_count BIGINT DEFAULT 0,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """;
+
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement()) {
+
+            stmt.execute(sql);
+            System.out.println("✅ Таблица videos готова");
+
+        } catch (SQLException e) {
+            System.err.println("❌ Ошибка при инициализации БД: " + e.getMessage());
         }
     }
 }

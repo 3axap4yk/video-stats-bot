@@ -1,5 +1,7 @@
 #!/bin/bash
 
+cd "$(dirname "$0")"
+
 set -e
 
 PROJECT_NAME="video-stats-bot"
@@ -19,10 +21,10 @@ chmod +x gradlew || true
 echo "Запускаем контейнеры..."
 docker compose up -d --build
 
-echo "Ждём запуск приложения..."
+echo "Ждём запуск бота..."
 sleep 5
 
-echo "Логи контейнера:"
+echo "Логи:"
 docker compose logs --tail=50
 
 echo ""
