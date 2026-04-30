@@ -127,7 +127,7 @@ public class DbConnection {
     }
     public static void initDatabase() {
         String sql = """
-        CREATE TABLE IF NOT EXISTS videos (
+        CREATE TABLE IF NOT EXISTS public.videos (
             id SERIAL PRIMARY KEY,
             link TEXT NOT NULL UNIQUE,
             platform VARCHAR(50),
