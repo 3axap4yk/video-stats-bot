@@ -2,11 +2,38 @@
 
 [![Java](https://img.shields.io/badge/Java-17-orange)](https://openjdk.org/projects/jdk/17/)
 [![Docker](https://img.shields.io/badge/Docker-✓-blue)](https://www.docker.com/)
-[![License](https://img.shields.io/badge/License-MIT-green)](./LICENSE)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue)](https://www.postgresql.org/)
+[![Telegram](https://img.shields.io/badge/Telegram-Bot-blue)](https://core.telegram.org/bots/api)
+[![YouTube](https://img.shields.io/badge/YouTube-API%20v3-red)](https://developers.google.com/youtube/v3)
 
-**Video Stats Bot** — это сервис для автоматического сбора и агрегации статистики просмотров видео с разных платформ через удобный интерфейс в Telegram.
+**Video Stats Bot** — это сервис для автоматического сбора и агрегации статистики просмотров видео с платформ YouTube и ВКонтакте (ВК видео) через удобный интерфейс в Telegram.
+## Как это работает?
 
-> **Целевая аудитория:** Владельцы контента, блогеры, SMM-специалисты и digital-агентства, которым нужно в одном месте отслеживать динамику просмотров без ручного захода на каждую платформу.
+```
+👤 Пользователь
+│
+│ /add https://youtu.be/...
+▼
+🤖 Telegram Bot
+│
+│ Определяет платформу (YouTube / VK)
+▼
+🔍 API платформы
+│
+│ Возвращает необходимые данные
+▼
+🗄️ PostgreSQL
+│
+│ Сохраняет и считает
+▼
+📊 Статистика
+│
+│ Список видео + сумма просмотров
+▼
+👤 Пользователь
+```
+
+> **Целевая аудитория:** Владельцы контента, блогеры, SMM-специалисты и digital-агентства, которым нужно в одном месте отслеживать динамику и статистику просмотров без ручного захода на каждую платформу.
 
 ## 📋 Содержание
 - [Возможности](#-возможности)
@@ -20,7 +47,7 @@
 ## 🚀 Возможности
 
 - **Приём ссылок на видео** через Telegram-бота.
-- **Автоматическое определение платформы** (YouTube, VK Video, RuTube, Дзен).
+- **Автоматическое определение платформы** (YouTube \ VK Video).
 - **Получение и сохранение** актуального количества просмотров через официальные API.
 - **Вывод списка** всех добавленных видео с текущей статистикой.
 - **Агрегация данных**: общее количество видео и суммарные просмотры.
@@ -31,13 +58,13 @@
 ## 🛠️ Технологический стек
 
 | Компонент | Технология |
-|-----------|------------|
+|-----------|--------|
 | **Язык бэкенда** | Java 17 |
 | **База данных** | PostgreSQL 17 (Alpine) |
 | **Интерфейс** | Telegram Bot API |
 | **Внешние API** | YouTube Data API v3 |
 | **Контейнеризация** | Docker + Docker Compose |
-| **Сборщик** | Maven / Gradle |
+| **Сборщик** | Gradle |
 
 ## 📋 Требования для развертывания
 
@@ -47,7 +74,6 @@
 - Linux (Ubuntu 20.04+ рекомендуется)
 - Docker Engine 20.10+
 - Docker Compose 1.29+
-- Минимум 1 ГБ RAM, 10 ГБ свободного места на диске
 
 ### Учётные записи и ключи
 - **Telegram Bot Token** — получить у [@BotFather](https://t.me/BotFather) (создать бота и скопировать токен).
@@ -74,30 +100,27 @@ nano .env
 
 ### Шаг 3: Запустить сервис
 
-docker-compose up -d --build
+./run
 
-### Шаг 4: Проверить работу
+Скрипт `run` автоматически:
+- собирает проект через Gradle
+- пересобирает Docker-образы
+- поднимает PostgreSQL и backend через docker-compose
+- выводит логи бота
 
-1. Убедитесь, что контейнеры запущены:
+### Краткая проверка работоспособности:
 
-   docker ps
+1. Проверьте запуск контейнеров:
 
-   Вы должны увидеть контейнер video_stats_backend в статусе Up.
+docker ps
+
+Вы должны увидеть контейнеры video_stats_bot и video_stats_db в статусе Up.
 
 2. Проверьте логи:
 
-   docker-compose logs -f
+docker-compose logs -f
 
 3. Найдите вашего бота в Telegram по имени (указанному в .env) и отправьте команду /start.
-
-### Шаг 5: Обновить на новую версию
-
-Когда выйдет обновление, выполните команды ниже, чтобы получить последнюю версию и перезапустить сервис:
-
-git pull origin main
-docker-compose down
-docker-compose up -d --build
-
 
 ## ⚙️ Конфигурация (.env)
 
@@ -105,10 +128,10 @@ docker-compose up -d --build
 
 ### База данных
 
-DB_HOST=host.docker.internal
+DB_HOST=db
 DB_PORT=5432
-DB_NAME=hackaton_db
-DB_USER=admin
+DB_NAME=your_DB-name_here
+DB_USER=your_username_here
 DB_PASSWORD=your_password_here
 
 ### YouTube API
@@ -118,7 +141,6 @@ YOUTUBE_API_KEY=your_youtube_api_key_here
 ### Telegram Bot
 
 TELEGRAM_BOT_TOKEN=your_bot_token_here
-TELEGRAM_BOT_USERNAME=your_bot_username_here
 
 > Внимание: Файл .env содержит секретные данные. Никогда не добавляйте его в репозиторий — он уже находится в .gitignore.
 
@@ -128,20 +150,21 @@ TELEGRAM_BOT_USERNAME=your_bot_username_here
 ```
 video-stats-bot/
 ├── src/main/java/com/project/
-│ ├── bot/ # Логика Telegram-бота
+│ ├── bot/ # Telegram-бот (команды, кнопки, обработчики)
 │ ├── config/ # Конфигурация приложения
-│ ├── model/ # Сущности (Entity)
-│ ├── repository/ # Слой доступа к данным (JDBC)
-│ └── service/ # Бизнес-логика и клиенты API
-├── src/main/resources/
-│ └── schema.sql # SQL-схема базы данных
+│ ├── model/ # Модели данных
+│ ├── repository/ # Работа с БД (JDBC)
+│ └── service/ # Бизнес-логика и работа с API (YouTube, ВК)
 ├── src/test/ # Тесты
+├── db # SQL схема и инициализация БД
+│ └── init.sql
 ├── Dockerfile # Инструкция сборки Docker-образа
-├── docker-compose.yml # Оркестрация контейнеров
+├── docker-compose.yml # Запуск PostgreSQL и бота
 ├── .env.example # Шаблон переменных окружения
 ├── build.gradle # Конфигурация сборки Gradle
 ├── gradlew # Gradle Wrapper
-└── README.md # Вы здесь
+├── run # Скрипт запуска проекта
+└── README.md
 ```
 
 ## 💻 Разработка
@@ -149,7 +172,12 @@ video-stats-bot/
 ### Локальный запуск (без Docker)
 
 1. Установите Java 17.
-2. Настройте переменные окружения (или временный `.env` файл).
+2. Настройте переменные окружения.
+Скопируйте и заполните `.env`:
+   ```bash
+   cp .env.example .env
+   nano .env
+Подробное описание всех переменных — в разделе «Конфигурация (.env)».
 3. Выполните:
 
 # Linux / macOS
@@ -181,4 +209,4 @@ gradlew.bat jar
 
 ### Подключение к базе данных для отладки
 
-Используйте DBeaver или любой другой SQL-клиент. SQL-схема для создания таблиц находится в файле src/main/resources/schema.sql.
+Используйте DBeaver или любой другой SQL-клиент. SQL-схема для создания таблиц находится в корневой директории проекта: db/init.sql
