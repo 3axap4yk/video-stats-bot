@@ -72,12 +72,22 @@ CREATE TABLE IF NOT EXISTS public.youtube (
         REFERENCES public.videos(link) ON DELETE CASCADE
 );
 
--- 6. Привязка последовательностей к колонкам
+-- 6. Таблица истории просмотров (для аналитики)
+CREATE TABLE IF NOT EXISTS public.views_history (
+    id SERIAL PRIMARY KEY,
+    video_id INTEGER NOT NULL,
+    views_count BIGINT NOT NULL,
+    recorded_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT views_history_video_id_fkey FOREIGN KEY (video_id)
+        REFERENCES public.videos(id) ON DELETE CASCADE
+);
+
+-- 7. Привязка последовательностей к колонкам
 ALTER SEQUENCE public.videos_id_seq OWNED BY public.videos.id;
 ALTER SEQUENCE public.vk_video_info_id_seq OWNED BY public.vk.id;
 ALTER SEQUENCE public.youtube_id_seq OWNED BY public.youtube.id;
 
--- 7. Создание индексов для оптимизации запросов
+-- 8. Создание индексов для оптимизации запросов
 
 -- Индексы для таблицы videos
 CREATE INDEX IF NOT EXISTS idx_videos_platform
@@ -115,9 +125,14 @@ CREATE INDEX IF NOT EXISTS idx_youtube_id_youtube
 CREATE INDEX IF NOT EXISTS idx_youtube_created_at
     ON public.youtube(created_at);
 
+-- Индексы для таблицы views_history
+CREATE INDEX IF NOT EXISTS idx_views_history_video_id
+    ON public.views_history(video_id);
 
+CREATE INDEX IF NOT EXISTS idx_views_history_recorded_at
+    ON public.views_history(recorded_at DESC);
 
--- 8. Комментарии к таблицам и колонкам (документация)
+-- 9. Комментарии к таблицам и колонкам (документация)
 COMMENT ON TABLE public.videos IS 'Общая информация о всех видео';
 COMMENT ON COLUMN public.videos.link IS 'URL видео (уникальный идентификатор)';
 COMMENT ON COLUMN public.videos.platform IS 'Платформа: youtube, vk, rutube и т.д.';
@@ -132,7 +147,13 @@ COMMENT ON COLUMN public.vk.id_vk_external IS 'Внешний ID видео в V
 COMMENT ON TABLE public.youtube IS 'Специфичные данные для видео YouTube';
 COMMENT ON COLUMN public.youtube.id_youtube IS 'ID видео на YouTube';
 
--- 9. Обновление статистики для оптимизатора
+COMMENT ON TABLE public.views_history IS 'История изменения просмотров для аналитики динамики';
+COMMENT ON COLUMN public.views_history.video_id IS 'Ссылка на видео';
+COMMENT ON COLUMN public.views_history.views_count IS 'Количество просмотров в момент замера';
+COMMENT ON COLUMN public.views_history.recorded_at IS 'Время замера';
+
+-- 10. Обновление статистики для оптимизатора
 ANALYZE public.videos;
 ANALYZE public.vk;
 ANALYZE public.youtube;
+ANALYZE public.views_history;
