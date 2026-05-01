@@ -1,12 +1,33 @@
 # Запуск приложения и базы данных PostgreSQL в контейнерах
 # Команда для запуска: docker compose up --build
 services:
+  db:
+    image: postgres:17-alpine
+    container_name: video_stats_db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+    ports:
+      - "5432:5432"
+
   backend:
     build: .
     container_name: video_stats_bot
     restart: unless-stopped
 
+    depends_on:
+      - db
+
     env_file:
       - .env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres_data:
