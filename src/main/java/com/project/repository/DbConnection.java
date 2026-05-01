@@ -1,18 +1,21 @@
 package com.project.repository;
 
 import io.github.cdimascio.dotenv.Dotenv;
+import com.project.utils.Logger;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.Statement;
 
-// Установление подключения к PostgreSQL через JDBC
-// Создание DataSource для управления соединениями
-
+/**
+ * Установление подключения к PostgreSQL через JDBC
+ * Создание DataSource для управления соединениями
+ */
 public class DbConnection {
     private static Connection connection = null;
     private static final Dotenv dotenv = Dotenv.load();
 
-    // Формируем URL подключения из переменных .env
     private static String getDbUrl() {
         String host = dotenv.get("DB_HOST");
         String port = dotenv.get("DB_PORT");
@@ -28,49 +31,51 @@ public class DbConnection {
         return dotenv.get("DB_PASSWORD");
     }
 
-    // Получить соединение с БД (одиночка)
+    /**
+     * Получить соединение с БД (одиночка)
+     */
     public static Connection getConnection() throws SQLException {
         if (connection == null || connection.isClosed()) {
             try {
-                // Загружаем драйвер PostgreSQL
                 Class.forName("org.postgresql.Driver");
+                Logger.info("Подключение к БД: " + getDbUrl());
 
-                System.out.println("Подключение к БД: " + getDbUrl());
-
-
-                // Создаем соединение
                 connection = DriverManager.getConnection(
                         getDbUrl(),
                         getDbUser(),
                         getDbPassword()
                 );
-                System.out.println("Подключение к PostgreSQL установлено");
+                Logger.success("Подключение к PostgreSQL установлено");
 
             } catch (ClassNotFoundException e) {
-                System.err.println("Драйвер PostgreSQL не найден. Добавьте зависимость в build.gradle");
+                Logger.error("Драйвер PostgreSQL не найден. Добавьте зависимость в build.gradle");
                 throw new SQLException("Driver not found", e);
             } catch (SQLException e) {
-                System.err.println("Ошибка подключения к БД: " + e.getMessage());
+                Logger.error("Ошибка подключения к БД: " + e.getMessage());
                 throw e;
             }
         }
         return connection;
     }
 
-    // Закрыть соединение
+    /**
+     * Закрыть соединение
+     */
     public static void closeConnection() {
         if (connection != null) {
             try {
                 connection.close();
                 connection = null;
-                System.out.println("Подключение к БД закрыто");
+                Logger.info("Подключение к БД закрыто");
             } catch (SQLException e) {
-                System.err.println("Ошибка при закрытии подключения: " + e.getMessage());
+                Logger.error("Ошибка при закрытии подключения: " + e.getMessage());
             }
         }
     }
 
-    // Проверить подключение
+    /**
+     * Проверить подключение
+     */
     public static boolean isConnected() {
         try {
             return connection != null && !connection.isClosed();
@@ -79,7 +84,9 @@ public class DbConnection {
         }
     }
 
-    // Проверка доступности БД с возвратом статуса
+    /**
+     * Проверка доступности БД с возвратом статуса
+     */
     public static boolean isDatabaseAvailable() {
         try {
             Connection conn = getConnection();
@@ -87,40 +94,68 @@ public class DbConnection {
             closeConnection();
             return isConnected;
         } catch (SQLException e) {
-            System.err.println("❌ БД недоступна: " + e.getMessage());
+            Logger.error("БД недоступна: " + e.getMessage());
             return false;
         }
     }
 
+    /**
+     * Инициализация БД: создание таблиц, если они не существуют
+     * Совместимо с кодом Никиты (hostingUnavailable) и Ивана (Docker)
+     */
+    public static void initDatabase() {
+        String sql = """
+            CREATE TABLE IF NOT EXISTS videos (
+                link VARCHAR(500) PRIMARY KEY,
+                platform VARCHAR(50) NOT NULL,
+                title TEXT NOT NULL,
+                views_count BIGINT NOT NULL DEFAULT 0,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                hosting_unavailable BOOLEAN DEFAULT FALSE
+            );
+            
+            CREATE INDEX IF NOT EXISTS idx_videos_platform ON videos(platform);
+            CREATE INDEX IF NOT EXISTS idx_videos_last_updated ON videos(last_updated);
+            """;
+
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement()) {
+            stmt.execute(sql);
+            Logger.success("Таблицы БД инициализированы");
+        } catch (SQLException e) {
+            Logger.warn("Ошибка инициализации БД: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Тестовое подключение к БД (для отладки)
+     */
     public static void testConnection() {
-        System.out.println("\n=== ТЕСТ ПОДКЛЮЧЕНИЯ К БД ===\n");
+        Logger.info("=== ТЕСТ ПОДКЛЮЧЕНИЯ К БД ===");
 
         try {
-            // Пытаемся подключиться
             Connection conn = getConnection();
 
             if (conn != null && !conn.isClosed()) {
-                System.out.println("✅ ПОДКЛЮЧЕНИЕ УСПЕШНО!");
-                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                System.out.println("📊 Информация о подключении:");
-                System.out.println("   URL: " + conn.getMetaData().getURL());
-                System.out.println("   Версия БД: " + conn.getMetaData().getDatabaseProductVersion());
-                System.out.println("   Драйвер: " + conn.getMetaData().getDriverName());
-                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                Logger.success("ПОДКЛЮЧЕНИЕ УСПЕШНО!");
+                Logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                Logger.info("📊 Информация о подключении:");
+                Logger.info("   URL: " + conn.getMetaData().getURL());
+                Logger.info("   Версия БД: " + conn.getMetaData().getDatabaseProductVersion());
+                Logger.info("   Драйвер: " + conn.getMetaData().getDriverName());
+                Logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             } else {
-                System.out.println("❌ Не удалось получить подключение");
+                Logger.error("Не удалось получить подключение");
             }
 
         } catch (SQLException e) {
-            System.out.println("❌ ОШИБКА ПОДКЛЮЧЕНИЯ!");
-            System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            System.out.println("Сообщение: " + e.getMessage());
-            System.out.println("\nВозможные причины:");
-            System.out.println("   1. PostgreSQL не запущен");
-            System.out.println("   2. Неправильные параметры в .env");
-            System.out.println("   3. База данных не существует");
-            System.out.println("   4. Неверный пароль");
-            System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            Logger.error("ОШИБКА ПОДКЛЮЧЕНИЯ!");
+            Logger.error("Сообщение: " + e.getMessage());
+            Logger.warn("Возможные причины:");
+            Logger.warn("   1. PostgreSQL не запущен");
+            Logger.warn("   2. Неправильные параметры в .env");
+            Logger.warn("   3. База данных не существует");
+            Logger.warn("   4. Неверный пароль");
             e.printStackTrace();
         }
     }

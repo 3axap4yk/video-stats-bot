@@ -11,9 +11,9 @@ import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
 import com.project.service.StatisticsService;
 import com.project.service.YouTubeException;
+import com.project.utils.Logger;
+import com.project.utils.ViewFormatter;
 
-import java.text.NumberFormat;
-import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongConsumer;
@@ -32,19 +32,20 @@ import static com.project.bot.BotMessages.VIDEO_STATS_TEMPLATE;
 import static com.project.bot.BotMessages.VK_STATS_NOT_SUPPORTED;
 import static com.project.bot.BotMessages.YOUTUBE_API_FAILED;
 
+/**
+ * Обработчик добавления новых ссылок на видео
+ */
 public class AddLinks {
+
+    private static final int MAX_URL_LENGTH = 500;
+
     private final TelegramBot bot;
     private final UrlResolver urlResolver;
     private final LongConsumer showStartDialog;
     private final VideoRepository videoRepository = new VideoRepository();
-
-    // Множество chatId, ожидающих ввода URL (thread-safe)
     private final Set<Long> chatsAwaitingUrl = ConcurrentHashMap.newKeySet();
 
-    public AddLinks(
-            TelegramBot bot,
-            UrlResolver urlResolver,
-            LongConsumer showStartDialog) {
+    public AddLinks(TelegramBot bot, UrlResolver urlResolver, LongConsumer showStartDialog) {
         this.bot = bot;
         this.urlResolver = urlResolver;
         this.showStartDialog = showStartDialog;
@@ -80,10 +81,14 @@ public class AddLinks {
     }
 
     public void onSubmittedUrl(long chatId, String rawUrl) {
-
-        // Нормализация URL: trim + удаление внутренних пробелов
         String normalizedUrl = rawUrl == null ? "" : rawUrl.trim();
         normalizedUrl = normalizedUrl.replaceAll("\\s+", "");
+
+        if (normalizedUrl.length() > MAX_URL_LENGTH) {
+            bot.execute(new SendMessage(chatId, "❌ Ссылка слишком длинная (максимум " + MAX_URL_LENGTH + " символов).")
+                    .replyMarkup(buildCancelKeyboard()));
+            return;
+        }
 
         if (!urlResolver.isValidUrl(normalizedUrl)) {
             bot.execute(new SendMessage(chatId, INVALID_URL).replyMarkup(buildCancelKeyboard()));
@@ -110,11 +115,9 @@ public class AddLinks {
         try {
             StatisticsService statsService;
             try {
-
-                // Инициализация сервиса статистики; YouTubeException — ошибка конфигурации/API-ключа
                 statsService = new StatisticsService(normalizedUrl);
             } catch (YouTubeException e) {
-                System.err.println("Ошибка создания StatisticsService: " + e.getMessage());
+                Logger.error("Ошибка создания StatisticsService: " + e.getMessage());
                 bot.execute(new SendMessage(chatId, YOUTUBE_API_FAILED).replyMarkup(buildCancelKeyboard()));
                 return;
             }
@@ -125,7 +128,7 @@ public class AddLinks {
                 title = statsService.getTitle();
                 viewCount = statsService.getViewCount();
             } catch (YouTubeException e) {
-                System.err.println("Ошибка получения данных с YouTube: " + e.getMessage());
+                Logger.error("Ошибка получения данных с YouTube: " + e.getMessage());
                 bot.execute(new SendMessage(chatId, YOUTUBE_API_FAILED).replyMarkup(buildCancelKeyboard()));
                 return;
             }
@@ -137,30 +140,34 @@ public class AddLinks {
             stats.setPlatform("YouTube");
             stats.setTitle(title);
             stats.setViewCount(viewCount);
-            stats.setHostingUnavailable(false);  // Новое видео — платформа заведомо доступна
+            stats.setHostingUnavailable(false);
 
             InlineKeyboardButton backBtn = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
             InlineKeyboardMarkup backKeyboard = new InlineKeyboardMarkup(backBtn);
 
-            // Проверка: ссылка уже есть в БД — сохранение не выполняем
             VideoStats existing = videoRepository.findByUrl(stats.getVideoUrl());
             if (existing != null) {
-                String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
-                        + "\n\nЭта ссылка уже добавлена.";
+                String text = VIDEO_STATS_TEMPLATE.formatted(
+                        stats.getTitle(),
+                        ViewFormatter.formatViews(stats.getViewCount()),
+                        stats.getPlatform())
+                        + "\n\n⚠️ Эта ссылка уже добавлена.";
                 bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
                 return;
             }
 
             videoRepository.save(stats);
-            String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
-                    + "\n\nСсылка добавлена.";
+            String text = VIDEO_STATS_TEMPLATE.formatted(
+                    stats.getTitle(),
+                    ViewFormatter.formatViews(stats.getViewCount()),
+                    stats.getPlatform())
+                    + "\n\n✅ Ссылка добавлена.";
             bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
         } finally {
             deleteMessageIfPresent(chatId, progressMessageId);
         }
     }
 
-    // Отправляет сообщение-заглушку "в процессе" и возвращает его messageId для последующего удаления
     private Integer sendProgressMessage(long chatId) {
         SendResponse response = bot.execute(new SendMessage(chatId, REQUEST_IN_PROGRESS));
         if (response.isOk() && response.message() != null) {
@@ -169,7 +176,6 @@ public class AddLinks {
         return null;
     }
 
-    // Удаляет сообщение-заглушку после получения результата (или при ошибке — через finally)
     private void deleteMessageIfPresent(long chatId, Integer messageId) {
         if (messageId == null) {
             return;
@@ -180,12 +186,5 @@ public class AddLinks {
     private InlineKeyboardMarkup buildCancelKeyboard() {
         InlineKeyboardButton cancelBtn = new InlineKeyboardButton(BTN_CANCEL).callbackData(CANCEL);
         return new InlineKeyboardMarkup(cancelBtn);
-    }
-
-    // Форматирует число просмотров (1 234 567),
-    // заменяет неразрывный пробел \u00A0 на обычный для корректного отображения в Telegram
-    private static String formatViews(long views) {
-        String formatted = NumberFormat.getInstance(new Locale("ru", "RU")).format(views);
-        return formatted.replace('\u00A0', ' ');
     }
 }

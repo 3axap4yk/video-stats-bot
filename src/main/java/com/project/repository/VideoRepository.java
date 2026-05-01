@@ -1,6 +1,8 @@
 package com.project.repository;
 
 import com.project.model.VideoStats;
+import com.project.utils.Logger;
+
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,10 +31,10 @@ public class VideoRepository {
             pstmt.setBoolean(5, stats.isHostingUnavailable());
 
             pstmt.executeUpdate();
-            System.out.println("Сохранено в БД: " + stats.getVideoUrl());
+            Logger.info("Сохранено в БД: " + stats.getVideoUrl());
 
         } catch (SQLException e) {
-            System.err.println("Ошибка сохранения: " + e.getMessage());
+            Logger.error("Ошибка сохранения: " + e.getMessage());
         }
     }
 
@@ -58,7 +60,7 @@ public class VideoRepository {
             }
 
         } catch (SQLException e) {
-            System.err.println("Ошибка поиска: " + e.getMessage());
+            Logger.error("Ошибка поиска: " + e.getMessage());
         }
         return null;
     }
@@ -84,12 +86,11 @@ public class VideoRepository {
             }
 
         } catch (SQLException e) {
-            System.err.println("Ошибка получения списка: " + e.getMessage());
+            Logger.error("Ошибка получения списка: " + e.getMessage());
         }
         return list;
     }
 
-    // Остальные методы (getTotalViews, getTotalLinks, deleteByUrl) остаются без изменений
     public long getTotalViews() {
         String sql = "SELECT SUM(views_count) as total FROM videos";
 
@@ -102,7 +103,7 @@ public class VideoRepository {
             }
 
         } catch (SQLException e) {
-            System.err.println("Ошибка подсчёта: " + e.getMessage());
+            Logger.error("Ошибка подсчёта: " + e.getMessage());
         }
         return 0;
     }
@@ -119,7 +120,7 @@ public class VideoRepository {
             }
 
         } catch (SQLException e) {
-            System.err.println("Ошибка подсчёта количества ссылок: " + e.getMessage());
+            Logger.error("Ошибка подсчёта количества ссылок: " + e.getMessage());
         }
         return 0;
     }
@@ -132,10 +133,10 @@ public class VideoRepository {
 
             pstmt.setString(1, videoUrl);
             pstmt.executeUpdate();
-            System.out.println("Удалено из БД: " + videoUrl);
+            Logger.info("Удалено из БД: " + videoUrl);
 
         } catch (SQLException e) {
-            System.err.println("Ошибка удаления: " + e.getMessage());
+            Logger.error("Ошибка удаления: " + e.getMessage());
         }
     }
 }
