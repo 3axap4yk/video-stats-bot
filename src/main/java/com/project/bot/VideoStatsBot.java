@@ -7,6 +7,7 @@ import com.pengrad.telegrambot.model.Message;
 import com.pengrad.telegrambot.model.Update;
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
+import com.pengrad.telegrambot.model.request.ParseMode;
 import com.pengrad.telegrambot.request.AnswerCallbackQuery;
 import com.pengrad.telegrambot.request.DeleteWebhook;
 import com.pengrad.telegrambot.request.SendMessage;
@@ -24,6 +25,7 @@ public class VideoStatsBot {
     private final AddLinks addLinks;
     private final RefreshStatsLinks refreshStatsLinks;
     private final ListLinks listLinks;
+    private final StatsHandler statsHandler;
     private final ExecutorService executorService;
 
     public VideoStatsBot(TelegramBot bot, UrlResolver urlResolver, TelegramUserWhitelist userWhitelist) {
@@ -32,7 +34,7 @@ public class VideoStatsBot {
         this.addLinks = new AddLinks(bot, urlResolver, this::sendStartDialog);
         this.refreshStatsLinks = new RefreshStatsLinks(bot);
         this.listLinks = new ListLinks(bot);
-        // Пул из 5 потоков для фоновых задач
+        this.statsHandler = new StatsHandler();
         this.executorService = Executors.newFixedThreadPool(5);
     }
 
@@ -51,7 +53,6 @@ public class VideoStatsBot {
         Logger.info("Бот запущен и слушает сообщения...");
         Logger.info("Нажмите Ctrl+C для остановки");
 
-        // Добавляем хук для корректного завершения
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             Logger.info("Завершение работы бота...");
             executorService.shutdown();
@@ -113,7 +114,6 @@ public class VideoStatsBot {
             Logger.info("Команда /start от чата: " + chatId);
             sendStartDialog(chatId);
         } else if (text.startsWith("/")) {
-            // Игнорируем другие команды
             return;
         } else if (addLinks.isAwaitingUrl(chatId)) {
             Logger.info("Получена ссылка от чата: " + chatId + " -> " + text);
@@ -143,7 +143,6 @@ public class VideoStatsBot {
                 break;
             case BotCallbacks.REFRESH_STATS:
                 Logger.info("Обработка REFRESH_STATS");
-                // Используем пул потоков для фоновой задачи
                 int finalMessageId = messageId != null ? messageId : -1;
                 executorService.submit(() -> refreshStatsLinks.onClick(chatId, callbackQueryId, finalMessageId));
                 break;
@@ -155,31 +154,43 @@ public class VideoStatsBot {
                 Logger.info("Обработка BACK");
                 addLinks.onBack(chatId, callbackQueryId);
                 break;
+            case BotCallbacks.STATS:
+                Logger.info("Обработка STATS");
+                showStats(chatId, callbackQueryId);
+                break;
             default:
                 Logger.warn("Неизвестный callback: " + data);
                 break;
         }
     }
 
-    private void resetChat(long chatId) {
-        // Сброс состояния ожидания URL для чата
+    private void showStats(long chatId, String callbackQueryId) {
+        bot.execute(new AnswerCallbackQuery(callbackQueryId));
+        String stats = statsHandler.getStats();
+        InlineKeyboardButton backButton = new InlineKeyboardButton(BotMessages.BTN_BACK)
+                .callbackData(BotCallbacks.BACK);
+        InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(backButton);
+        bot.execute(new SendMessage(chatId, stats)
+                .parseMode(ParseMode.HTML)
+                .replyMarkup(keyboard));
     }
 
     private void sendStartDialog(long chatId) {
         Logger.info("Отправляем стартовое меню в чат: " + chatId);
 
-        // Исправлено: правильный способ создания кнопок
         InlineKeyboardButton addLinkBtn = new InlineKeyboardButton(BotMessages.BTN_ADD_LINK)
                 .callbackData(BotCallbacks.ADD_LINK);
         InlineKeyboardButton linksListBtn = new InlineKeyboardButton(BotMessages.BTN_LINKS_LIST)
                 .callbackData(BotCallbacks.LINKS_LIST);
         InlineKeyboardButton refreshStatsBtn = new InlineKeyboardButton(BotMessages.BTN_REFRESH_STATS)
                 .callbackData(BotCallbacks.REFRESH_STATS);
+        InlineKeyboardButton statsBtn = new InlineKeyboardButton(BotMessages.BTN_STATS)
+                .callbackData(BotCallbacks.STATS);
 
         InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(
                 new InlineKeyboardButton[][]{
                         {addLinkBtn, linksListBtn},
-                        {refreshStatsBtn}
+                        {refreshStatsBtn, statsBtn}
                 }
         );
 

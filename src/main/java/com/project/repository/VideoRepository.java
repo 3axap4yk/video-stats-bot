@@ -5,7 +5,9 @@ import com.project.utils.Logger;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class VideoRepository {
 
@@ -48,13 +50,25 @@ public class VideoRepository {
             if (rs.next()) {
                 int id = rs.getInt("id");
                 Logger.info("Сохранено в БД: " + stats.getVideoUrl() + " (id=" + id + ")");
+                saveToHistory(id, stats.getViewCount());
             }
 
-            // После сохранения видео, сохраняем платформо-специфичные данные
             savePlatformSpecificData(stats);
 
         } catch (SQLException e) {
             Logger.error("Ошибка сохранения: " + e.getMessage());
+        }
+    }
+
+    public void saveToHistory(int videoId, long viewsCount) {
+        String sql = "INSERT INTO views_history (video_id, views_count) VALUES (?, ?)";
+        try (Connection conn = DbConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, videoId);
+            pstmt.setLong(2, viewsCount);
+            pstmt.executeUpdate();
+        } catch (SQLException e) {
+            Logger.error("Ошибка сохранения истории: " + e.getMessage());
         }
     }
 
@@ -93,7 +107,6 @@ public class VideoRepository {
 
     public VideoStats findByUrl(String videoUrl) {
         if (videoUrl == null || videoUrl.isBlank()) {
-            Logger.warn("findByUrl called with null or blank URL");
             return null;
         }
 
@@ -133,61 +146,100 @@ public class VideoRepository {
         return list;
     }
 
-    public List<VideoStats> findAllOrderByViews() {
+    public List<VideoStats> findTopByViews(int limit) {
         List<VideoStats> list = new ArrayList<>();
-        String sql = "SELECT * FROM videos ORDER BY views_count DESC";
+        String sql = "SELECT * FROM videos ORDER BY views_count DESC LIMIT ?";
 
         try (Connection conn = DbConnection.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, limit);
+            ResultSet rs = pstmt.executeQuery();
 
             while (rs.next()) {
                 list.add(mapResultSetToVideoStats(rs));
             }
 
         } catch (SQLException e) {
-            Logger.error("Ошибка получения списка: " + e.getMessage());
+            Logger.error("Ошибка получения топа: " + e.getMessage());
         }
         return list;
     }
 
-    public void deleteById(int id) {
-        String sql = "DELETE FROM videos WHERE id = ?";
+    public Map<String, Integer> getPlatformCount() {
+        Map<String, Integer> result = new HashMap<>();
+        String sql = "SELECT platform, COUNT(*) FROM videos GROUP BY platform";
 
         try (Connection conn = DbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
 
-            pstmt.setInt(1, id);
-            int deleted = pstmt.executeUpdate();
-            if (deleted > 0) {
-                Logger.info("Удалено из БД по id: " + id);
+            while (rs.next()) {
+                result.put(rs.getString(1), rs.getInt(2));
             }
 
         } catch (SQLException e) {
-            Logger.error("Ошибка удаления: " + e.getMessage());
+            Logger.error("Ошибка подсчёта по платформам: " + e.getMessage());
         }
+        return result;
     }
 
-    public void deleteByUrl(String videoUrl) {
-        if (videoUrl == null || videoUrl.isBlank()) {
-            Logger.warn("deleteByUrl called with null or blank URL");
-            return;
-        }
-
-        String sql = "DELETE FROM videos WHERE link = ?";
+    public Map<String, Long> getPlatformViews() {
+        Map<String, Long> result = new HashMap<>();
+        String sql = "SELECT platform, SUM(views_count) FROM videos GROUP BY platform";
 
         try (Connection conn = DbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
 
-            pstmt.setString(1, videoUrl);
-            int deleted = pstmt.executeUpdate();
-            if (deleted > 0) {
-                Logger.info("Удалено из БД: " + videoUrl);
+            while (rs.next()) {
+                result.put(rs.getString(1), rs.getLong(2));
             }
 
         } catch (SQLException e) {
-            Logger.error("Ошибка удаления: " + e.getMessage());
+            Logger.error("Ошибка подсчёта просмотров: " + e.getMessage());
         }
+        return result;
+    }
+
+    public List<GrowthData> getWeeklyGrowth() {
+        List<GrowthData> result = new ArrayList<>();
+        String sql = """
+            SELECT v.title, 
+                   h1.views_count as old_views,
+                   v.views_count as new_views,
+                   ((v.views_count - h1.views_count) * 100.0 / h1.views_count) as growth
+            FROM videos v
+            JOIN views_history h1 ON v.id = h1.video_id
+            WHERE h1.recorded_at >= NOW() - INTERVAL '7 days'
+            AND h1.recorded_at = (
+                SELECT MIN(h2.recorded_at) 
+                FROM views_history h2 
+                WHERE h2.video_id = v.id 
+                AND h2.recorded_at >= NOW() - INTERVAL '7 days'
+            )
+            AND v.views_count > h1.views_count
+            ORDER BY growth DESC
+            LIMIT 10
+        """;
+
+        try (Connection conn = DbConnection.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                GrowthData g = new GrowthData();
+                g.setTitle(rs.getString("title"));
+                g.setOldViews(rs.getLong("old_views"));
+                g.setNewViews(rs.getLong("new_views"));
+                g.setGrowthPercent(rs.getDouble("growth"));
+                result.add(g);
+            }
+
+        } catch (SQLException e) {
+            Logger.error("Ошибка получения динамики: " + e.getMessage());
+        }
+        return result;
     }
 
     public long getTotalViews() {
@@ -224,23 +276,18 @@ public class VideoRepository {
         return 0;
     }
 
-    public int getCountByPlatform(String platform) {
-        String sql = "SELECT COUNT(*) as total FROM videos WHERE platform = ?";
+    public void deleteByUrl(String videoUrl) {
+        String sql = "DELETE FROM videos WHERE link = ?";
 
         try (Connection conn = DbConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            pstmt.setString(1, platform);
-            ResultSet rs = pstmt.executeQuery();
-
-            if (rs.next()) {
-                return rs.getInt("total");
-            }
+            pstmt.setString(1, videoUrl);
+            pstmt.executeUpdate();
 
         } catch (SQLException e) {
-            Logger.error("Ошибка подсчёта по платформе: " + e.getMessage());
+            Logger.error("Ошибка удаления: " + e.getMessage());
         }
-        return 0;
     }
 
     private VideoStats mapResultSetToVideoStats(ResultSet rs) throws SQLException {
@@ -262,9 +309,6 @@ public class VideoRepository {
     // =============================================
 
     public void saveYouTubeId(String videoUrl, String youtubeId) {
-        if (videoUrl == null || videoUrl.isBlank()) return;
-        if (youtubeId == null || youtubeId.isBlank()) return;
-
         String sql = """
             INSERT INTO youtube (video_link, id_youtube, updated_at)
             VALUES (?, ?, CURRENT_TIMESTAMP)
@@ -279,7 +323,6 @@ public class VideoRepository {
             pstmt.setString(1, videoUrl);
             pstmt.setString(2, youtubeId);
             pstmt.executeUpdate();
-            Logger.info("Сохранён YouTube ID для: " + videoUrl);
 
         } catch (SQLException e) {
             Logger.error("Ошибка сохранения YouTube ID: " + e.getMessage());
@@ -287,8 +330,6 @@ public class VideoRepository {
     }
 
     public String findYouTubeIdByUrl(String videoUrl) {
-        if (videoUrl == null || videoUrl.isBlank()) return null;
-
         String sql = "SELECT id_youtube FROM youtube WHERE video_link = ?";
 
         try (Connection conn = DbConnection.getConnection();
@@ -312,9 +353,6 @@ public class VideoRepository {
     // =============================================
 
     public void saveVkId(String videoUrl, String vkId, String vkExternalId) {
-        if (videoUrl == null || videoUrl.isBlank()) return;
-        if (vkId == null || vkId.isBlank()) return;
-
         String sql = """
             INSERT INTO vk (video_link, id_vk, id_vk_external, updated_at)
             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
@@ -331,7 +369,6 @@ public class VideoRepository {
             pstmt.setString(2, vkId);
             pstmt.setString(3, vkExternalId);
             pstmt.executeUpdate();
-            Logger.info("Сохранён VK ID для: " + videoUrl);
 
         } catch (SQLException e) {
             Logger.error("Ошибка сохранения VK ID: " + e.getMessage());
@@ -339,8 +376,6 @@ public class VideoRepository {
     }
 
     public String findVkIdByUrl(String videoUrl) {
-        if (videoUrl == null || videoUrl.isBlank()) return null;
-
         String sql = "SELECT id_vk FROM vk WHERE video_link = ?";
 
         try (Connection conn = DbConnection.getConnection();
@@ -355,27 +390,6 @@ public class VideoRepository {
 
         } catch (SQLException e) {
             Logger.error("Ошибка поиска VK ID: " + e.getMessage());
-        }
-        return null;
-    }
-
-    public String findVkExternalIdByUrl(String videoUrl) {
-        if (videoUrl == null || videoUrl.isBlank()) return null;
-
-        String sql = "SELECT id_vk_external FROM vk WHERE video_link = ?";
-
-        try (Connection conn = DbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
-            pstmt.setString(1, videoUrl);
-            ResultSet rs = pstmt.executeQuery();
-
-            if (rs.next()) {
-                return rs.getString("id_vk_external");
-            }
-
-        } catch (SQLException e) {
-            Logger.error("Ошибка поиска VK external ID: " + e.getMessage());
         }
         return null;
     }
@@ -418,5 +432,25 @@ public class VideoRepository {
             }
         }
         return null;
+    }
+
+    // =============================================
+    // ВНУТРЕННИЙ КЛАСС ДЛЯ ДАННЫХ РОСТА
+    // =============================================
+
+    public static class GrowthData {
+        private String title;
+        private long oldViews;
+        private long newViews;
+        private double growthPercent;
+
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+        public long getOldViews() { return oldViews; }
+        public void setOldViews(long oldViews) { this.oldViews = oldViews; }
+        public long getNewViews() { return newViews; }
+        public void setNewViews(long newViews) { this.newViews = newViews; }
+        public double getGrowthPercent() { return growthPercent; }
+        public void setGrowthPercent(double growthPercent) { this.growthPercent = growthPercent; }
     }
 }
