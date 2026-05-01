@@ -10,6 +10,7 @@ import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
 import com.project.utils.Logger;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -24,6 +25,8 @@ import static com.project.utils.FormatUtils.formatViews;
  * Обработчик кнопки "Список ссылок" — формирует и отправляет список видео из БД
  */
 public class ListLinks {
+
+    private static final int MAX_MESSAGE_LENGTH = 4096;
 
     private final TelegramBot bot;
     private final VideoRepository videoRepository;
@@ -104,13 +107,63 @@ public class ListLinks {
 
         Logger.info("Отправляем сообщение со списком и кнопкой возврата...");
 
-        SendMessage request = new SendMessage(chatId, message.toString());
-        request.parseMode(ParseMode.HTML);
-        request.disableWebPagePreview(true);
-        request.replyMarkup(keyboard);
-        bot.execute(request);
+        // Отправляем с разбиением на части
+        sendLongMessage(chatId, message.toString(), keyboard);
 
         Logger.success("Сообщение отправлено");
+    }
+
+    /**
+     * Отправляет длинное сообщение, разбивая на части по 4096 символов
+     */
+    private void sendLongMessage(long chatId, String text, InlineKeyboardMarkup keyboard) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+
+        if (text.length() <= MAX_MESSAGE_LENGTH) {
+            bot.execute(new SendMessage(chatId, text)
+                    .parseMode(ParseMode.HTML)
+                    .disableWebPagePreview(true)
+                    .replyMarkup(keyboard));
+            return;
+        }
+
+        // Разбиваем на части по MAX_MESSAGE_LENGTH символов
+        List<String> parts = new ArrayList<>();
+        int start = 0;
+        int totalLength = text.length();
+        int totalParts = (int) Math.ceil((double) totalLength / MAX_MESSAGE_LENGTH);
+
+        while (start < totalLength) {
+            int end = Math.min(start + MAX_MESSAGE_LENGTH, totalLength);
+
+            // Если конец не в конце строки, ищем последний перенос строки
+            if (end < totalLength) {
+                int lastNewLine = text.lastIndexOf('\n', end);
+                if (lastNewLine > start) {
+                    end = lastNewLine + 1;
+                }
+            }
+
+            String part = text.substring(start, end);
+            parts.add(part);
+            start = end;
+        }
+
+        // Отправляем каждую часть
+        for (int i = 0; i < parts.size(); i++) {
+            String header = parts.size() > 1 ? "📄 Часть " + (i + 1) + "/" + parts.size() + "\n\n" : "";
+            bot.execute(new SendMessage(chatId, header + parts.get(i))
+                    .parseMode(ParseMode.HTML)
+                    .disableWebPagePreview(true));
+        }
+
+        // Отправляем кнопку отдельным сообщением
+        if (keyboard != null) {
+            bot.execute(new SendMessage(chatId, "⬅️ Нажмите для возврата в меню")
+                    .replyMarkup(keyboard));
+        }
     }
 
     private static String platformHeader(String platformKey, int count) {

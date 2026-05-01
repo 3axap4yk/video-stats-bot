@@ -29,6 +29,10 @@ dependencies {
     // JUnit для тестов
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // Mockito для мок-тестов
+    testImplementation 'org.mockito:mockito-core:5.10.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.10.0'
 }
 
 application {
@@ -58,7 +62,7 @@ test {
     useJUnitPlatform()
 }
 
-// ========== ДОБАВИТЬ ЭТО ==========
+// ========== Кодировка ==========
 compileJava {
     options.encoding = 'UTF-8'
 }
