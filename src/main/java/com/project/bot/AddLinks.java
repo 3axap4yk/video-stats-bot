@@ -12,7 +12,6 @@ import com.project.repository.VideoRepository;
 import com.project.service.StatisticsService;
 import com.project.service.YouTubeException;
 import com.project.utils.Logger;
-import com.project.utils.ViewFormatter;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,24 +19,13 @@ import java.util.function.LongConsumer;
 
 import static com.project.bot.BotCallbacks.BACK;
 import static com.project.bot.BotCallbacks.CANCEL;
-import static com.project.bot.BotMessages.ADD_LINK_CANCELLED;
-import static com.project.bot.BotMessages.BTN_BACK;
-import static com.project.bot.BotMessages.BTN_CANCEL;
-import static com.project.bot.BotMessages.DEAD_LINK;
-import static com.project.bot.BotMessages.INVALID_URL;
-import static com.project.bot.BotMessages.PROMPT_SEND_URL;
-import static com.project.bot.BotMessages.REQUEST_IN_PROGRESS;
-import static com.project.bot.BotMessages.UNSUPPORTED_PLATFORM;
-import static com.project.bot.BotMessages.VIDEO_STATS_TEMPLATE;
-import static com.project.bot.BotMessages.VK_STATS_NOT_SUPPORTED;
-import static com.project.bot.BotMessages.YOUTUBE_API_FAILED;
+import static com.project.bot.BotMessages.*;
+import static com.project.utils.FormatUtils.formatViews;
 
 /**
  * Обработчик добавления новых ссылок на видео
  */
 public class AddLinks {
-
-    private static final int MAX_URL_LENGTH = 500;
 
     private final TelegramBot bot;
     private final UrlResolver urlResolver;
@@ -83,12 +71,6 @@ public class AddLinks {
     public void onSubmittedUrl(long chatId, String rawUrl) {
         String normalizedUrl = rawUrl == null ? "" : rawUrl.trim();
         normalizedUrl = normalizedUrl.replaceAll("\\s+", "");
-
-        if (normalizedUrl.length() > MAX_URL_LENGTH) {
-            bot.execute(new SendMessage(chatId, "❌ Ссылка слишком длинная (максимум " + MAX_URL_LENGTH + " символов).")
-                    .replyMarkup(buildCancelKeyboard()));
-            return;
-        }
 
         if (!urlResolver.isValidUrl(normalizedUrl)) {
             bot.execute(new SendMessage(chatId, INVALID_URL).replyMarkup(buildCancelKeyboard()));
@@ -147,21 +129,15 @@ public class AddLinks {
 
             VideoStats existing = videoRepository.findByUrl(stats.getVideoUrl());
             if (existing != null) {
-                String text = VIDEO_STATS_TEMPLATE.formatted(
-                        stats.getTitle(),
-                        ViewFormatter.formatViews(stats.getViewCount()),
-                        stats.getPlatform())
-                        + "\n\n⚠️ Эта ссылка уже добавлена.";
+                String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
+                        + "\n\nЭта ссылка уже добавлена.";
                 bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
                 return;
             }
 
             videoRepository.save(stats);
-            String text = VIDEO_STATS_TEMPLATE.formatted(
-                    stats.getTitle(),
-                    ViewFormatter.formatViews(stats.getViewCount()),
-                    stats.getPlatform())
-                    + "\n\n✅ Ссылка добавлена.";
+            String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
+                    + "\n\nСсылка добавлена.";
             bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
         } finally {
             deleteMessageIfPresent(chatId, progressMessageId);

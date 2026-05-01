@@ -9,7 +9,6 @@ import com.pengrad.telegrambot.request.SendMessage;
 import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
 import com.project.utils.Logger;
-import com.project.utils.ViewFormatter;
 
 import java.util.Comparator;
 import java.util.List;
@@ -19,6 +18,7 @@ import java.util.stream.Collectors;
 
 import static com.project.bot.BotCallbacks.BACK;
 import static com.project.bot.BotMessages.BTN_BACK;
+import static com.project.utils.FormatUtils.formatViews;
 
 /**
  * Обработчик кнопки "Список ссылок" — формирует и отправляет список видео из БД
@@ -40,6 +40,7 @@ public class ListLinks {
         Logger.info("ListLinks.onClick ВЫЗВАН!");
         Logger.info("   chatId: " + chatId);
 
+        // Убираем индикатор загрузки у кнопки на стороне клиента
         bot.execute(new AnswerCallbackQuery(callbackQueryId));
 
         List<VideoStats> videos = videoRepository.findAll();
@@ -52,12 +53,14 @@ public class ListLinks {
 
         StringBuilder message = new StringBuilder();
 
+        // Группируем видео по платформе (YOUTUBE, VK VIDEO, ...)
         Map<String, List<VideoStats>> groupedByPlatform = videos.stream()
                 .collect(Collectors.groupingBy(
                         v -> normalizePlatformKey(v.getPlatform()),
                         Collectors.toList()
                 ));
 
+        // Сортируем: YouTube первый, VK второй, остальные по алфавиту
         List<String> sortedPlatforms = groupedByPlatform.keySet().stream()
                 .sorted(Comparator
                         .comparingInt(ListLinks::platformOrderIndex)
@@ -75,14 +78,14 @@ public class ListLinks {
             message.append(platformHeader(platformKey, platformVideos.size())).append("\n\n");
 
             for (VideoStats video : platformVideos) {
-                String title = ViewFormatter.escapeHtml(video.getTitle());
-                String url = ViewFormatter.escapeHtml(video.getVideoUrl());
-                String platformLabel = ViewFormatter.escapeHtml(platformLabel(platformKey, video.getPlatform()));
+                String title = escapeHtml(video.getTitle());
+                String url = escapeHtml(video.getVideoUrl());
+                String platformLabel = escapeHtml(platformLabel(platformKey, video.getPlatform()));
 
                 message.append(counter++).append(". ").append("<b>").append(title).append("</b>").append("\n");
                 message.append("   - ").append("▶️ ").append("<a href=\"").append(url).append("\">")
                         .append("Смотреть на ").append(platformLabel).append("</a>").append("\n");
-                message.append("   - ").append("👁️ Просмотров: ").append(ViewFormatter.formatViews(video.getViewCount()));
+                message.append("   - ").append("👁️ Просмотров: ").append(formatViews(video.getViewCount()));
 
                 if (video.isHostingUnavailable()) {
                     message.append(" ⚠️ Платформа временно недоступна");
@@ -93,8 +96,8 @@ public class ListLinks {
 
         int totalLinks = videos.size();
         long totalViews = videoRepository.getTotalViews();
-        message.append("📊 Общее количество видео: ").append(totalLinks).append("\n");
-        message.append("📈 Общее количество просмотров: ").append(ViewFormatter.formatViews(totalViews));
+        message.append("Общее количество видео: ").append(totalLinks).append("\n");
+        message.append("Общее количество просмотров: ").append(formatViews(totalViews));
 
         InlineKeyboardButton backButton = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
         InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(backButton);
@@ -152,5 +155,17 @@ public class ListLinks {
             return "Unknown";
         }
         return rawPlatform.trim();
+    }
+
+    private static String escapeHtml(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 }

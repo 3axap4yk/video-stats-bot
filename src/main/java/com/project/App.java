@@ -12,7 +12,7 @@ public class App {
     private static final Dotenv dotenv = Dotenv.load();
 
     public static String getBotToken() {
-        return dotenv.get("BOT_TOKEN");
+        return dotenv.get("TELEGRAM_BOT_TOKEN");  // ← ИСПРАВЛЕНО
     }
 
     public static String getYouTubeApiKey() {
@@ -28,12 +28,12 @@ public class App {
         if (botToken == null || botToken.isEmpty() || youtubeKey == null || youtubeKey.isEmpty()) {
             Logger.error("Переменные окружения не найдены или пусты");
             Logger.warn("Проверьте файл .env в корне проекта");
+            Logger.warn("Необходимые переменные: TELEGRAM_BOT_TOKEN, YOUTUBE_API_KEY");
             return;
         }
 
         Logger.success("Конфигурация загружена успешно");
 
-        // Инициализация БД (создание таблиц, если их нет)
         DbConnection.initDatabase();
 
         boolean dbAvailable = DbConnection.isDatabaseAvailable();

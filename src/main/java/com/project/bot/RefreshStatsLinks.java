@@ -3,6 +3,7 @@ package com.project.bot;
 import com.pengrad.telegrambot.TelegramBot;
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
+import com.pengrad.telegrambot.model.request.ParseMode;
 import com.pengrad.telegrambot.request.AnswerCallbackQuery;
 import com.pengrad.telegrambot.request.SendMessage;
 import com.project.model.VideoStats;
@@ -10,18 +11,15 @@ import com.project.repository.VideoRepository;
 import com.project.service.StatisticsService;
 import com.project.service.YouTubeException;
 import com.project.utils.Logger;
-import com.project.utils.ViewFormatter;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 
 import static com.project.bot.BotCallbacks.BACK;
 import static com.project.bot.BotMessages.BTN_BACK;
+import static com.project.utils.FormatUtils.formatViews;
 
-/**
- * Обработчик callback-кнопки "Обновить статистику всех ссылок"
- * Обновляет просмотры для всех видео в БД через YouTube API
- */
 public class RefreshStatsLinks {
 
     private static final int YOUTUBE_API_RATE_LIMIT_DELAY_MS = 200;
@@ -35,9 +33,34 @@ public class RefreshStatsLinks {
         this.videoRepository = new VideoRepository();
     }
 
+    /**
+     * Обработка нажатия кнопки - ЗАПУСКАЕТ ФОНОВУЮ ЗАДАЧУ
+     * Главный поток возвращается мгновенно, бот продолжает отвечать
+     */
     public void onClick(long chatId, String callbackQueryId, int messageId) {
+        // Сразу отвечаем на callback, чтобы убрать "часики" у кнопки
         bot.execute(new AnswerCallbackQuery(callbackQueryId));
-        bot.execute(new SendMessage(chatId, "🔄 Обновляю статистику всех видео... Это может занять несколько секунд."));
+
+        // Отправляем сообщение о начале обновления
+        bot.execute(new SendMessage(chatId, "🔄 Обновляю статистику всех видео... Это может занять несколько секунд. Я пришлю результат сюда же."));
+
+        // ЗАПУСКАЕМ ФОНОВУЮ ЗАДАЧУ - не блокируем главный поток!
+        CompletableFuture.runAsync(() -> {
+            try {
+                performUpdate(chatId);
+            } catch (Exception e) {
+                Logger.error("Ошибка в фоновом обновлении: " + e.getMessage());
+                bot.execute(new SendMessage(chatId, "❌ Произошла ошибка при обновлении статистики. Попробуйте позже."));
+            }
+        });
+    }
+
+    /**
+     * ФОНОВЫЙ МЕТОД - вся тяжёлая работа здесь
+     * Выполняется в отдельном потоке
+     */
+    private void performUpdate(long chatId) {
+        Logger.info("Начинаю фоновое обновление статистики для чата: " + chatId);
 
         List<VideoStats> videos = videoRepository.findAll();
 
@@ -72,6 +95,7 @@ public class RefreshStatsLinks {
                 updatedCount++;
                 totalViews += newViewCount;
 
+                // Небольшая задержка, чтобы не превысить лимиты API
                 Thread.sleep(YOUTUBE_API_RATE_LIMIT_DELAY_MS);
 
             } catch (YouTubeException | InterruptedException e) {
@@ -84,13 +108,21 @@ public class RefreshStatsLinks {
             }
         }
 
+        // Отправляем результат (можно в тот же чат)
         String resultMessage = String.format(
-                "✅ Обновление завершено!\n\n📊 Статистика:\n• Обновлено успешно: %d\n• С ошибками: %d\n• Всего видео: %d\n• Суммарные просмотры: %s",
-                updatedCount, errorCount, videos.size(), ViewFormatter.formatViews(totalViews)
+                "✅ Обновление завершено!\n\n" +
+                        "📊 Статистика:\n" +
+                        "• Обновлено успешно: %d\n" +
+                        "• С ошибками: %d\n" +
+                        "• Всего видео: %d\n" +
+                        "• Суммарные просмотры: %s",
+                updatedCount, errorCount, videos.size(), formatViews(totalViews)
         );
 
         bot.execute(new SendMessage(chatId, resultMessage));
         sendUpdatedList(chatId);
+
+        Logger.success("Фоновое обновление завершено для чата: " + chatId);
     }
 
     private void sendUpdatedList(long chatId) {
@@ -105,8 +137,8 @@ public class RefreshStatsLinks {
         for (int i = 0; i < Math.min(videos.size(), MAX_VIDEOS_IN_PREVIEW); i++) {
             VideoStats video = videos.get(i);
             message.append(i + 1).append(". ");
-            message.append("<b>").append(ViewFormatter.escapeHtml(video.getTitle())).append("</b>").append("\n");
-            message.append("   👁️ Просмотров: ").append(ViewFormatter.formatViews(video.getViewCount()));
+            message.append("<b>").append(escapeHtml(video.getTitle())).append("</b>").append("\n");
+            message.append("   👁️ Просмотров: ").append(formatViews(video.getViewCount()));
 
             if (video.isHostingUnavailable()) {
                 message.append(" ⚠️ Платформа временно недоступна");
@@ -122,9 +154,21 @@ public class RefreshStatsLinks {
         InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(backButton);
 
         bot.execute(new SendMessage(chatId, message.toString())
-                .parseMode(com.pengrad.telegrambot.model.request.ParseMode.HTML)
+                .parseMode(ParseMode.HTML)
                 .disableWebPagePreview(true)
                 .replyMarkup(keyboard));
+    }
+
+    private static String escapeHtml(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 
     private static boolean isYouTube(VideoStats video) {

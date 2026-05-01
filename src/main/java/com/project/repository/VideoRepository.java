@@ -11,6 +11,37 @@ public class VideoRepository {
 
     // INSERT/UPDATE с hosting_unavailable
     public void save(VideoStats stats) {
+        // =============================================
+        // ВАЛИДАЦИЯ ВХОДНЫХ ДАННЫХ
+        // =============================================
+        if (stats == null) {
+            Logger.error("Cannot save: VideoStats is null");
+            return;
+        }
+
+        if (stats.getVideoUrl() == null || stats.getVideoUrl().isBlank()) {
+            Logger.error("Cannot save: video URL is null or blank");
+            return;
+        }
+
+        if (stats.getPlatform() == null || stats.getPlatform().isBlank()) {
+            Logger.error("Cannot save: platform is null or blank for URL: " + stats.getVideoUrl());
+            return;
+        }
+
+        if (stats.getTitle() == null || stats.getTitle().isBlank()) {
+            Logger.error("Cannot save: title is null or blank for URL: " + stats.getVideoUrl());
+            return;
+        }
+
+        if (stats.getViewCount() < 0) {
+            Logger.warn("Saving video with negative view count: " + stats.getViewCount() + " for URL: " + stats.getVideoUrl());
+            // Не возвращаем, а просто логируем - можно сохранить и 0
+        }
+
+        // =============================================
+        // СОХРАНЕНИЕ В БД
+        // =============================================
         String sql = """
             INSERT INTO videos (link, platform, title, views_count, last_updated, hosting_unavailable)
             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
@@ -40,6 +71,12 @@ public class VideoRepository {
 
     // SELECT с hosting_unavailable
     public VideoStats findByUrl(String videoUrl) {
+        // Валидация входного параметра
+        if (videoUrl == null || videoUrl.isBlank()) {
+            Logger.warn("findByUrl called with null or blank URL");
+            return null;
+        }
+
         String sql = "SELECT * FROM videos WHERE link = ?";
 
         try (Connection conn = DbConnection.getConnection();
@@ -54,7 +91,10 @@ public class VideoRepository {
                 stats.setPlatform(rs.getString("platform"));
                 stats.setTitle(rs.getString("title"));
                 stats.setViewCount(rs.getLong("views_count"));
-                stats.setLastUpdated(rs.getTimestamp("last_updated").toLocalDateTime());
+                Timestamp timestamp = rs.getTimestamp("last_updated");
+                if (timestamp != null) {
+                    stats.setLastUpdated(timestamp.toLocalDateTime());
+                }
                 stats.setHostingUnavailable(rs.getBoolean("hosting_unavailable"));
                 return stats;
             }
@@ -80,7 +120,10 @@ public class VideoRepository {
                 stats.setPlatform(rs.getString("platform"));
                 stats.setTitle(rs.getString("title"));
                 stats.setViewCount(rs.getLong("views_count"));
-                stats.setLastUpdated(rs.getTimestamp("last_updated").toLocalDateTime());
+                Timestamp timestamp = rs.getTimestamp("last_updated");
+                if (timestamp != null) {
+                    stats.setLastUpdated(timestamp.toLocalDateTime());
+                }
                 stats.setHostingUnavailable(rs.getBoolean("hosting_unavailable"));
                 list.add(stats);
             }
@@ -126,14 +169,24 @@ public class VideoRepository {
     }
 
     public void deleteByUrl(String videoUrl) {
+        // Валидация входного параметра
+        if (videoUrl == null || videoUrl.isBlank()) {
+            Logger.warn("deleteByUrl called with null or blank URL");
+            return;
+        }
+
         String sql = "DELETE FROM videos WHERE link = ?";
 
         try (Connection conn = DbConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, videoUrl);
-            pstmt.executeUpdate();
-            Logger.info("Удалено из БД: " + videoUrl);
+            int deleted = pstmt.executeUpdate();
+            if (deleted > 0) {
+                Logger.info("Удалено из БД: " + videoUrl);
+            } else {
+                Logger.warn("Ничего не удалено: видео не найдено - " + videoUrl);
+            }
 
         } catch (SQLException e) {
             Logger.error("Ошибка удаления: " + e.getMessage());
