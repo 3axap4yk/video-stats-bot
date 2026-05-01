@@ -1,0 +1,31 @@
+#!/bin/bash
+
+cd "$(dirname "$0")"
+
+set -e
+
+PROJECT_NAME="video-stats-bot"
+
+echo "Проверяем зависимости..."
+
+command -v docker >/dev/null 2>&1 || { echo "❌ Docker не установлен"; exit 1; }
+command -v docker compose >/dev/null 2>&1 || { echo "❌ Docker Compose не установлен"; exit 1; }
+
+echo "Очищаем старое окружение..."
+docker compose down --remove-orphans
+
+echo "Собираем проект..."
+chmod +x gradlew || true
+./gradlew clean build
+
+echo "Запускаем контейнеры..."
+docker compose up -d --build
+
+echo "Ждём запуск бота..."
+sleep 5
+
+echo "Логи:"
+docker compose logs --tail=50
+
+echo ""
+echo "Бот успешно запущен!"

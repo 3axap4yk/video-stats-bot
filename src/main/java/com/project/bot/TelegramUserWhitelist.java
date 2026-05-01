@@ -1,5 +1,7 @@
 package com.project.bot;
 
+import com.project.utils.Logger;
+
 import java.util.HashSet;
 import java.util.Set;
 
@@ -32,7 +34,7 @@ public final class TelegramUserWhitelist {
             try {
                 parsed.add(Long.parseLong(trimmed));
             } catch (NumberFormatException e) {
-                System.err.println("Whitelist: пропущен некорректный id: " + trimmed);
+                Logger.warn("Whitelist: пропущен некорректный id: " + trimmed);
             }
         }
         if (parsed.isEmpty()) {
