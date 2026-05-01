@@ -29,7 +29,7 @@ public class VideoStatsBot {
     public VideoStatsBot(TelegramBot bot, UrlResolver urlResolver, TelegramUserWhitelist userWhitelist) {
         this.bot = bot;
         this.userWhitelist = userWhitelist;
-        this.addLinks = new AddLinks(bot, urlResolver, this::resetChat);
+        this.addLinks = new AddLinks(bot, urlResolver, this::sendStartDialog);
         this.refreshStatsLinks = new RefreshStatsLinks(bot);
         this.listLinks = new ListLinks(bot);
         // Пул из 5 потоков для фоновых задач
