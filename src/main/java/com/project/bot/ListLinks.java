@@ -12,6 +12,7 @@ import com.project.repository.VideoRepository;
 import com.project.utils.Logger;
 import com.project.utils.ViewFormatter;
 
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -43,7 +44,7 @@ public class ListLinks {
         Map<String, List<VideoStats>> groupedByPlatform = videos.stream()
                 .collect(Collectors.groupingBy(VideoStats::getPlatform));
 
-        // Сортируем платформы для стабильного порядка
+        // Сортируем платформы
         List<String> sortedPlatforms = new ArrayList<>(groupedByPlatform.keySet());
         sortedPlatforms.sort((p1, p2) -> {
             int order1 = getPlatformOrderIndex(p1);
@@ -51,100 +52,94 @@ public class ListLinks {
             return Integer.compare(order1, order2);
         });
 
-        // Строим одно большое сообщение
-        StringBuilder fullMessage = new StringBuilder();
-        fullMessage.append("📋 <b>Ваши видео:</b>\n\n");
+        // Строим все части сообщения
+        List<String> allParts = new ArrayList<>();
+        StringBuilder currentPart = new StringBuilder();
+        currentPart.append("📋 <b>Ваши видео:</b>\n\n");
 
         int totalLinks = videos.size();
-        // Исправлено: используем getViewCount(), а не getTotalViews()
         long totalViews = videos.stream().mapToLong(VideoStats::getViewCount).sum();
-
         int counter = 1;
+
         for (String platformKey : sortedPlatforms) {
             List<VideoStats> platformVideos = groupedByPlatform.get(platformKey);
             String platformHeader = getPlatformHeader(platformKey, platformVideos.size());
-            fullMessage.append(platformHeader).append("\n");
+            String headerWithNewlines = platformHeader + "\n\n";
+
+            // Проверяем, влезет ли заголовок платформы
+            if (currentPart.length() + headerWithNewlines.length() > MAX_MESSAGE_LENGTH && currentPart.length() > 0) {
+                allParts.add(currentPart.toString());
+                currentPart = new StringBuilder();
+                currentPart.append("📋 <b>Ваши видео:</b>\n\n");
+            }
+            currentPart.append(headerWithNewlines);
 
             for (VideoStats video : platformVideos) {
                 String title = ViewFormatter.escapeHtml(video.getTitle());
                 String url = video.getVideoUrl();
                 String platform = video.getPlatform();
-
                 String platformLabel = getPlatformLabel(platform, title);
                 String viewsFormatted = ViewFormatter.formatViews(video.getViewCount());
 
-                fullMessage.append(counter++).append(". ")
-                        .append("<b>").append(title).append("</b>\n")
-                        .append("   ▶️ <a href=\"").append(url).append("\">Смотреть на ")
-                        .append(platformLabel).append("</a>\n")
-                        .append("   📊 Просмотров: ").append(viewsFormatted);
-
-                if (video.isHostingUnavailable()) {
-                    fullMessage.append(" ⚠️ Платформа временно недоступна");
+                // Время обновления
+                String timeStr = "";
+                if (video.getLastUpdated() != null) {
+                    timeStr = "\n   🕐 Обновлено: " + video.getLastUpdated()
+                            .format(DateTimeFormatter.ofPattern("dd.MM HH:mm"));
                 }
-                fullMessage.append("\n\n");
+
+                String unavailableStr = "";
+                if (video.isHostingUnavailable()) {
+                    unavailableStr = " ⚠️ Платформа временно недоступна";
+                }
+
+                String videoEntry = counter++ + ". <b>" + title + "</b>\n" +
+                        "   ▶️ <a href=\"" + url + "\">Смотреть на " + platformLabel + "</a>\n" +
+                        "   📊 Просмотров: " + viewsFormatted + unavailableStr + timeStr + "\n\n";
+
+                // Если текущая запись не влезает - создаём новую часть
+                if (currentPart.length() + videoEntry.length() > MAX_MESSAGE_LENGTH) {
+                    // Добавляем текущую часть в список
+                    allParts.add(currentPart.toString());
+                    // Начинаем новую часть
+                    currentPart = new StringBuilder();
+                    currentPart.append("📋 <b>Ваши видео:</b>\n\n");
+                    currentPart.append(platformHeader + "\n\n");
+                }
+                currentPart.append(videoEntry);
             }
         }
 
         // Добавляем итоговую статистику
-        fullMessage.append("\n━━━━━━━━━━━━━━━━━━\n");
-        fullMessage.append("📊 <b>Итоговая статистика:</b>\n");
-        fullMessage.append("• Всего видео: ").append(totalLinks).append("\n");
-        fullMessage.append("• Всего просмотров: ").append(ViewFormatter.formatViews(totalViews));
+        String footer = "\n━━━━━━━━━━━━━━━━━━\n" +
+                "📊 <b>Итоговая статистика:</b>\n" +
+                "• Всего видео: " + totalLinks + "\n" +
+                "• Всего просмотров: " + ViewFormatter.formatViews(totalViews);
 
-        String fullMessageStr = fullMessage.toString();
+        if (currentPart.length() + footer.length() > MAX_MESSAGE_LENGTH) {
+            allParts.add(currentPart.toString());
+            currentPart = new StringBuilder();
+            currentPart.append("📋 <b>Ваши видео:</b>\n\n");
+        }
+        currentPart.append(footer);
+        allParts.add(currentPart.toString());
 
-        // Исправлено: правильный способ создания кнопки
+        // Отправляем все части
         InlineKeyboardButton backButton = new InlineKeyboardButton(BotMessages.BTN_BACK)
                 .callbackData(BotCallbacks.BACK);
         InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(backButton);
 
-        // Отправляем сообщение с разбиением на части
-        sendLongMessage(chatId, fullMessageStr, keyboard);
-        answerCallback(callbackQueryId);
-    }
-
-    private void sendLongMessage(long chatId, String text, InlineKeyboardMarkup keyboard) {
-        if (text == null || text.isEmpty()) {
-            return;
-        }
-
-        int length = text.length();
-
-        if (length <= MAX_MESSAGE_LENGTH) {
-            sendMessage(chatId, text, keyboard);
-            return;
-        }
-
-        // Разбиваем на части
-        List<String> parts = new ArrayList<>();
-        int start = 0;
-
-        while (start < length) {
-            int end = Math.min(start + MAX_MESSAGE_LENGTH, length);
-
-            // Ищем последний перенос строки для красивого разбиения
-            if (end < length) {
-                int lastNewLine = text.lastIndexOf('\n', end);
-                if (lastNewLine > start) {
-                    end = lastNewLine + 1;
-                }
-            }
-
-            parts.add(text.substring(start, end));
-            start = end;
-        }
-
-        // Отправляем части
-        for (int i = 0; i < parts.size(); i++) {
-            String part = parts.get(i);
-            String header = (parts.size() > 1) ? "📄 Часть " + (i + 1) + "/" + parts.size() + "\n\n" : "";
+        for (int i = 0; i < allParts.size(); i++) {
+            String part = allParts.get(i);
+            String header = (allParts.size() > 1) ? "📄 Часть " + (i + 1) + "/" + allParts.size() + "\n\n" : "";
             String messageText = header + part;
 
             // Кнопку возврата добавляем только к последней части
-            InlineKeyboardMarkup partKeyboard = (i == parts.size() - 1) ? keyboard : null;
+            InlineKeyboardMarkup partKeyboard = (i == allParts.size() - 1) ? keyboard : null;
             sendMessage(chatId, messageText, partKeyboard);
         }
+
+        answerCallback(callbackQueryId);
     }
 
     private void sendMessage(long chatId, String text, InlineKeyboardMarkup keyboard) {
