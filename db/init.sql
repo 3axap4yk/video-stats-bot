@@ -33,7 +33,7 @@ CREATE SEQUENCE IF NOT EXISTS public.youtube_id_seq
 
 -- 3. Таблица videos (общая информация о видео)
 CREATE TABLE IF NOT EXISTS public.videos (
-                                             id INTEGER NOT NULL DEFAULT nextval('public.videos_id_seq'),
+    id INTEGER NOT NULL DEFAULT nextval('public.videos_id_seq'),
     link TEXT NOT NULL,
     platform VARCHAR(50),
     title TEXT,
@@ -43,11 +43,11 @@ CREATE TABLE IF NOT EXISTS public.videos (
     created_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT videos_pkey PRIMARY KEY (id),
     CONSTRAINT videos_link_key UNIQUE (link)
-    );
+);
 
 -- 4. Таблица vk (специфичные данные для VK)
 CREATE TABLE IF NOT EXISTS public.vk (
-                                         id INTEGER NOT NULL DEFAULT nextval('public.vk_video_info_id_seq'),
+    id INTEGER NOT NULL DEFAULT nextval('public.vk_video_info_id_seq'),
     video_link TEXT NOT NULL,
     id_vk VARCHAR(50),
     id_vk_external VARCHAR(50),
@@ -56,12 +56,12 @@ CREATE TABLE IF NOT EXISTS public.vk (
     CONSTRAINT vk_video_info_pkey PRIMARY KEY (id),
     CONSTRAINT vk_video_info_video_link_key UNIQUE (video_link),
     CONSTRAINT vk_videos_fk FOREIGN KEY (video_link)
-    REFERENCES public.videos(link) ON DELETE CASCADE
-    );
+        REFERENCES public.videos(link) ON DELETE CASCADE
+);
 
 -- 5. Таблица youtube (специфичные данные для YouTube)
 CREATE TABLE IF NOT EXISTS public.youtube (
-                                              id INTEGER NOT NULL DEFAULT nextval('public.youtube_id_seq'),
+    id INTEGER NOT NULL DEFAULT nextval('public.youtube_id_seq'),
     video_link TEXT NOT NULL,
     id_youtube VARCHAR(50),
     created_at TIMESTAMP DEFAULT NOW(),
@@ -69,18 +69,18 @@ CREATE TABLE IF NOT EXISTS public.youtube (
     CONSTRAINT youtube_pkey PRIMARY KEY (id),
     CONSTRAINT youtube_video_link_key UNIQUE (video_link),
     CONSTRAINT youtube_video_link_fkey FOREIGN KEY (video_link)
-    REFERENCES public.videos(link) ON DELETE CASCADE
-    );
+        REFERENCES public.videos(link) ON DELETE CASCADE
+);
 
 -- 6. Таблица истории просмотров (для аналитики)
 CREATE TABLE IF NOT EXISTS public.views_history (
-                                                    id SERIAL PRIMARY KEY,
-                                                    video_id INTEGER NOT NULL,
-                                                    views_count BIGINT NOT NULL,
-                                                    recorded_at TIMESTAMP DEFAULT NOW(),
+    id SERIAL PRIMARY KEY,
+    video_id INTEGER NOT NULL,
+    views_count BIGINT NOT NULL,
+    recorded_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT views_history_video_id_fkey FOREIGN KEY (video_id)
-    REFERENCES public.videos(id) ON DELETE CASCADE
-    );
+        REFERENCES public.videos(id) ON DELETE CASCADE
+);
 
 -- 7. Привязка последовательностей к колонкам
 ALTER SEQUENCE public.videos_id_seq OWNED BY public.videos.id;

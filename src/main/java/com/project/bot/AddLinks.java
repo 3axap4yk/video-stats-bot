@@ -11,6 +11,7 @@ import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
 import com.project.service.StatisticsService;
 import com.project.service.YouTubeException;
+import com.project.utils.Logger;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,30 +19,21 @@ import java.util.function.LongConsumer;
 
 import static com.project.bot.BotCallbacks.BACK;
 import static com.project.bot.BotCallbacks.CANCEL;
-import static com.project.bot.BotMessages.ADD_LINK_CANCELLED;
-import static com.project.bot.BotMessages.BTN_BACK;
-import static com.project.bot.BotMessages.BTN_CANCEL;
-import static com.project.bot.BotMessages.DEAD_LINK;
-import static com.project.bot.BotMessages.INVALID_URL;
-import static com.project.bot.BotMessages.PROMPT_SEND_URL;
-import static com.project.bot.BotMessages.REQUEST_IN_PROGRESS;
-import static com.project.bot.BotMessages.UNSUPPORTED_PLATFORM;
-import static com.project.bot.BotMessages.VIDEO_STATS_TEMPLATE;
-import static com.project.bot.BotMessages.VK_STATS_NOT_SUPPORTED;
-import static com.project.bot.BotMessages.YOUTUBE_API_FAILED;
+import static com.project.bot.BotMessages.*;
+import static com.project.utils.FormatUtils.formatViews;
 
+/**
+ * Обработчик добавления новых ссылок на видео
+ */
 public class AddLinks {
+
     private final TelegramBot bot;
     private final UrlResolver urlResolver;
     private final LongConsumer showStartDialog;
     private final VideoRepository videoRepository = new VideoRepository();
-
     private final Set<Long> chatsAwaitingUrl = ConcurrentHashMap.newKeySet();
 
-    public AddLinks(
-            TelegramBot bot,
-            UrlResolver urlResolver,
-            LongConsumer showStartDialog) {
+    public AddLinks(TelegramBot bot, UrlResolver urlResolver, LongConsumer showStartDialog) {
         this.bot = bot;
         this.urlResolver = urlResolver;
         this.showStartDialog = showStartDialog;
@@ -107,7 +99,7 @@ public class AddLinks {
             try {
                 statsService = new StatisticsService(normalizedUrl);
             } catch (YouTubeException e) {
-                System.err.println("Ошибка создания StatisticsService: " + e.getMessage());
+                Logger.error("Ошибка создания StatisticsService: " + e.getMessage());
                 bot.execute(new SendMessage(chatId, YOUTUBE_API_FAILED).replyMarkup(buildCancelKeyboard()));
                 return;
             }
@@ -118,7 +110,7 @@ public class AddLinks {
                 title = statsService.getTitle();
                 viewCount = statsService.getViewCount();
             } catch (YouTubeException e) {
-                System.err.println("Ошибка получения данных с YouTube: " + e.getMessage());
+                Logger.error("Ошибка получения данных с YouTube: " + e.getMessage());
                 bot.execute(new SendMessage(chatId, YOUTUBE_API_FAILED).replyMarkup(buildCancelKeyboard()));
                 return;
             }
@@ -130,20 +122,21 @@ public class AddLinks {
             stats.setPlatform("YouTube");
             stats.setTitle(title);
             stats.setViewCount(viewCount);
+            stats.setHostingUnavailable(false);
 
             InlineKeyboardButton backBtn = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
             InlineKeyboardMarkup backKeyboard = new InlineKeyboardMarkup(backBtn);
 
             VideoStats existing = videoRepository.findByUrl(stats.getVideoUrl());
             if (existing != null) {
-                String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), stats.getViewCount(), stats.getPlatform())
+                String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
                         + "\n\nЭта ссылка уже добавлена.";
                 bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
                 return;
             }
 
             videoRepository.save(stats);
-            String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), stats.getViewCount(), stats.getPlatform())
+            String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
                     + "\n\nСсылка добавлена.";
             bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
         } finally {

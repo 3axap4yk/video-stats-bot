@@ -17,11 +17,31 @@ dependencies {
     // PostgreSQL драйвер
     implementation 'org.postgresql:postgresql:42.7.3'
 
+    // HikariCP - пул соединений с БД
+    implementation 'com.zaxxer:HikariCP:5.1.0'
+
+    // Caffeine - кэш
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+
     // Dotenv для .env файлов
     implementation 'io.github.cdimascio:dotenv-java:3.0.0'
 
     // Telegram Bot API (pengrad) — используется в com.pengrad.telegrambot.*
     implementation 'com.github.pengrad:java-telegram-bot-api:7.4.0'
+
+    // Jackson для парсеров
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+
+    // SLF4J Simple - для устранения warning
+    implementation 'org.slf4j:slf4j-simple:2.0.16'
+
+    // JUnit для тестов
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // Mockito для мок-тестов
+    testImplementation 'org.mockito:mockito-core:5.10.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.10.0'
 }
 
 application {
@@ -32,3 +52,43 @@ java {
     sourceCompatibility = '17'
     targetCompatibility = '17'
 }
+
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    manifest {
+        attributes(
+                'Main-Class': 'com.project.App'
+        )
+    }
+
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+test {
+    useJUnitPlatform()
+}
+
+// ========== Кодировка ==========
+compileJava {
+    options.encoding = 'UTF-8'
+}
+
+compileTestJava {
+    options.encoding = 'UTF-8'
+}
+
+javadoc {
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(JavaExec) {
+    systemProperty 'file.encoding', 'UTF-8'
+}
+
+application {
+    applicationDefaultJvmArgs = ['-Dfile.encoding=UTF-8']
+}
+// ==================================
