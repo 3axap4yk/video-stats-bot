@@ -1,183 +1,149 @@
 package com.project.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.project.utils.Logger;
 import io.github.cdimascio.dotenv.Dotenv;
 
-import java.net.ConnectException;
-import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
-// HTTP-запросы к YouTube Data API v3
-// Парсинг JSON-ответа
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 public class YouTubeClient {
     private final String apiKey;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
-    private final Map<String, JsonNode> responseCache;
+    private final Cache<String, JsonNode> responseCache;
 
-    public YouTubeClient() throws YouTubeException {
+    public YouTubeClient() {
         this.apiKey = loadApiKey();
         this.httpClient = HttpClient.newHttpClient();
         this.objectMapper = new ObjectMapper();
-        this.responseCache = new ConcurrentHashMap<>();
+        this.responseCache = Caffeine.newBuilder()
+                .maximumSize(1000)
+                .expireAfterWrite(1, TimeUnit.HOURS)
+                .build();
     }
 
-    //Получение просмотров
+    private String loadApiKey() {
+        Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
+        String key = dotenv.get("YOUTUBE_API_KEY");
+        if (key == null || key.trim().isEmpty()) {
+            Logger.error("YOUTUBE_API_KEY не найден в .env файле");
+            throw new IllegalStateException("YOUTUBE_API_KEY не найден в .env файле");
+        }
+        return key.trim();
+    }
+
     public long getViewCountByVideoId(String videoId) throws YouTubeException {
         JsonNode root = getVideoInfo(videoId);
 
+        JsonNode items = root.get("items");
+        if (items == null || items.isEmpty()) {
+            throw new YouTubeException("Видео с ID '" + videoId + "' не найдено");
+        }
+
+        JsonNode statistics = items.get(0).get("statistics");
+        if (statistics == null || !statistics.has("viewCount")) {
+            throw new YouTubeException("viewCount не найден для видео " + videoId);
+        }
+
         try {
-            JsonNode items = root.get("items");
-            if (items == null || items.isEmpty()) {
-                throw new YouTubeException("Видео с ID '" + videoId + "' не найдено");
-            }
-
-            JsonNode statistics = items.get(0).get("statistics");
-            if (statistics == null || !statistics.has("viewCount")) {
-                throw new YouTubeException("viewCount не найден для видео " + videoId);
-            }
-
             return statistics.get("viewCount").asLong();
-        } catch (YouTubeException e) {
-            throw e;
         } catch (Exception e) {
             throw new YouTubeException("Ошибка парсинга viewCount: " + e.getMessage(), e);
         }
     }
 
-    //Получение названия
     public String getTitleByVideoId(String videoId) throws YouTubeException {
         JsonNode root = getVideoInfo(videoId);
 
+        JsonNode items = root.get("items");
+        if (items == null || items.isEmpty()) {
+            throw new YouTubeException("Видео с ID '" + videoId + "' не найдено");
+        }
+
+        JsonNode snippet = items.get(0).get("snippet");
+        if (snippet == null || !snippet.has("title")) {
+            throw new YouTubeException("title не найден для видео " + videoId);
+        }
+
         try {
-            JsonNode items = root.get("items");
-            if (items == null || items.isEmpty()) {
-                throw new YouTubeException("Видео с ID '" + videoId + "' не найдено");
-            }
-
-            JsonNode snippet = items.get(0).get("snippet");
-            if (snippet == null || !snippet.has("title")) {
-                throw new YouTubeException("title не найден для видео " + videoId);
-            }
-
             return snippet.get("title").asText();
-        } catch (YouTubeException e) {
-            throw e;
         } catch (Exception e) {
             throw new YouTubeException("Ошибка парсинга title: " + e.getMessage(), e);
         }
     }
 
-    //Общий метод получения данных видео(с кэшированием)
     private JsonNode getVideoInfo(String videoId) throws YouTubeException {
-        if (responseCache.containsKey(videoId)) {
-            return responseCache.get(videoId);
-        }
-
-        String jsonResponse = sendRequest(videoId);
-
-        try {
-            JsonNode root = objectMapper.readTree(jsonResponse);
-            responseCache.put(videoId, root);
-            return root;
-        } catch (Exception e) {
-            throw new YouTubeException("Ошибка парсинга JSON ответа: " + e.getMessage(), e);
-        }
-    }
-
-    //Очистка кэша
-    public void clearCache() {
-        responseCache.clear();
-    }
-
-    public void clearCacheForVideo(String videoId) {
-        responseCache.remove(videoId);
-    }
-
-    //Загрузка API из .env
-    private String loadApiKey() throws YouTubeException {
-        try {
-            Dotenv dotenv = Dotenv.load();
-            String key = dotenv.get("YOUTUBE_API_KEY");
-
-            if (key == null || key.trim().isEmpty()) {
-                throw new YouTubeException("YOUTUBE_API_KEY не найден в .env файле");
-            }
-
-            return key;
-
-        } catch (Exception e) {
-            throw new YouTubeException("Ошибка загрузки API ключа из .env файла", e);
-        }
-    }
-
-    //Отправка HTTPS запроса
-    private String sendRequest(String videoId) throws YouTubeException {
         if (videoId == null || videoId.trim().isEmpty()) {
             throw new YouTubeException("ID видео не может быть пустым");
         }
 
-        String requestUrl = String.format("https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=%s&key=%s", videoId, apiKey);
+        // Проверяем кэш
+        JsonNode cached = responseCache.getIfPresent(videoId);
+        if (cached != null) {
+            return cached;
+        }
+
+        String url = String.format(
+                "https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=%s&key=%s",
+                videoId, apiKey
+        );
 
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(requestUrl))
+                    .uri(URI.create(url))
                     .GET()
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            int statusCode = response.statusCode();
+            String responseBody = response.body();
 
-            //Проверка на недействительный ключ или не включённое API
-            if (response.statusCode() == 400 && (response.body().contains("API_KEY_INVALID") || response.body().contains("keyInvalid"))) {
-                throw new YouTubeException("API ключ недействителен. Проверьте YOUTUBE_API_KEY в .env");
-            }
-            if (response.statusCode() == 403 && response.body().contains("accessNotConfigured")) {
-                throw new YouTubeException("YouTube Data API v3 не включена в Google Cloud Console");
+            if (statusCode != 200) {
+                handleErrorResponse(statusCode, responseBody);
             }
 
-            //Проверка что видео существует
-            if (response.body().contains("\"items\":[]") || response.body().contains("\"items\": []")) {
-                throw new YouTubeException("Видео с ID '" + videoId + "' не найдено");
-            }
+            JsonNode rootNode = objectMapper.readTree(responseBody);
 
-            //Проверка на превышение квоты
-            if (response.statusCode() == 403 && response.body().contains("quotaExceeded")) {
-                throw new YouTubeException("Превышен дневной лимит запросов YouTube API (10 000 запросов в день)");
-            }
+            // Сохраняем в кэш
+            responseCache.put(videoId, rootNode);
 
-            if (response.body().contains("quotaExceeded")) {
-                throw new YouTubeException("Превышен лимит квоты YouTube API. Лимит: 10 000 запросов в день");
-            }
-
-            //Любой другой статус, кроме 200
-            if (response.statusCode() != 200) {
-                throw new YouTubeException(String.format(
-                        "YouTube API вернул ошибку %d: %s",
-                        response.statusCode(),
-                        response.body()
-                ));
-            }
-
-            return response.body();
-
-        } catch (ConnectException e) {
-            throw new YouTubeException("Не удалось подключиться к YouTube API. Проверьте интернет соединение", e);
-        } catch (SocketTimeoutException e) {
-            throw new YouTubeException("Превышено время ожидания ответа от YouTube API", e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new YouTubeException("Запрос был прерван", e);
+            return rootNode;
         } catch (YouTubeException e) {
             throw e;
         } catch (Exception e) {
-            throw new YouTubeException("Неизвестная ошибка" + e.getMessage(), e);
+            Logger.error("Ошибка парсинга JSON ответа: " + e.getMessage(), e);
+            throw new YouTubeException("Неизвестная ошибка", e);
         }
+    }
+
+    private void handleErrorResponse(int statusCode, String responseBody) throws YouTubeException {
+        if (statusCode == 403) {
+            if (responseBody.contains("accessNotConfigured")) {
+                throw new YouTubeException("YouTube Data API v3 не включена в Google Cloud Console");
+            } else if (responseBody.contains("quotaExceeded")) {
+                throw new YouTubeException("Превышен дневной лимит запросов YouTube API (10 000 запросов в день)");
+            } else if (responseBody.contains("keyInvalid")) {
+                throw new YouTubeException("API ключ недействителен. Проверьте YOUTUBE_API_KEY в .env");
+            }
+        }
+        throw new YouTubeException(String.format("YouTube API вернул ошибку %d: %s", statusCode, responseBody));
+    }
+
+    public void clearCache() {
+        responseCache.invalidateAll();
+        Logger.info("Кэш YouTube API очищен");
+    }
+
+    public void clearCacheForVideo(String videoId) {
+        responseCache.invalidate(videoId);
+        Logger.info("Кэш для видео " + videoId + " очищен");
     }
 }
