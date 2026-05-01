@@ -34,13 +34,11 @@ public class DbConnection {
             config.setIdleTimeout(600000);
             config.setMaxLifetime(1800000);
 
-            // Загружаем драйвер
             Class.forName("org.postgresql.Driver");
 
             dataSource = new HikariDataSource(config);
             Logger.info("Пул соединений с БД инициализирован");
 
-            // Инициализируем таблицы
             initDatabase();
 
         } catch (ClassNotFoundException e) {
@@ -60,16 +58,64 @@ public class DbConnection {
     }
 
     public static void initDatabase() {
-        String sql = "CREATE TABLE IF NOT EXISTS videos (" +
-                "    link VARCHAR(500) PRIMARY KEY," +
-                "    platform VARCHAR(50) NOT NULL," +
-                "    title TEXT NOT NULL," +
-                "    views_count BIGINT NOT NULL DEFAULT 0," +
-                "    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP," +
-                "    hosting_unavailable BOOLEAN DEFAULT FALSE" +
-                ");" +
-                "CREATE INDEX IF NOT EXISTS idx_videos_platform ON videos(platform);" +
-                "CREATE INDEX IF NOT EXISTS idx_videos_last_updated ON videos(last_updated);";
+        String sql = """
+            -- Таблица videos
+            CREATE TABLE IF NOT EXISTS videos (
+                id SERIAL PRIMARY KEY,
+                link TEXT NOT NULL UNIQUE,
+                platform VARCHAR(50) NOT NULL,
+                title TEXT NOT NULL,
+                views_count BIGINT NOT NULL DEFAULT 0,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                hosting_unavailable BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+            
+            -- Таблица vk
+            CREATE TABLE IF NOT EXISTS vk (
+                id SERIAL PRIMARY KEY,
+                video_link TEXT NOT NULL UNIQUE,
+                id_vk VARCHAR(50),
+                id_vk_external VARCHAR(50),
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+            
+            -- Таблица youtube
+            CREATE TABLE IF NOT EXISTS youtube (
+                id SERIAL PRIMARY KEY,
+                video_link TEXT NOT NULL UNIQUE,
+                id_youtube VARCHAR(50),
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+            
+            -- Таблица истории просмотров
+            CREATE TABLE IF NOT EXISTS views_history (
+                id SERIAL PRIMARY KEY,
+                video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+                views_count BIGINT NOT NULL,
+                recorded_at TIMESTAMP DEFAULT NOW()
+            );
+            
+            -- Индексы для videos
+            CREATE INDEX IF NOT EXISTS idx_videos_platform ON videos(platform);
+            CREATE INDEX IF NOT EXISTS idx_videos_last_updated ON videos(last_updated);
+            CREATE INDEX IF NOT EXISTS idx_videos_views_count ON videos(views_count DESC);
+            CREATE INDEX IF NOT EXISTS idx_videos_hosting_unavailable ON videos(hosting_unavailable);
+            
+            -- Индексы для vk
+            CREATE INDEX IF NOT EXISTS idx_vk_video_link ON vk(video_link);
+            CREATE INDEX IF NOT EXISTS idx_vk_id_vk ON vk(id_vk);
+            
+            -- Индексы для youtube
+            CREATE INDEX IF NOT EXISTS idx_youtube_video_link ON youtube(video_link);
+            CREATE INDEX IF NOT EXISTS idx_youtube_id_youtube ON youtube(id_youtube);
+            
+            -- Индексы для views_history
+            CREATE INDEX IF NOT EXISTS idx_views_history_video_id ON views_history(video_id);
+            CREATE INDEX IF NOT EXISTS idx_views_history_recorded_at ON views_history(recorded_at DESC);
+        """;
 
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement()) {
