@@ -17,6 +17,12 @@ dependencies {
     // PostgreSQL драйвер
     implementation 'org.postgresql:postgresql:42.7.3'
 
+    // HikariCP - пул соединений с БД
+    implementation 'com.zaxxer:HikariCP:5.1.0'
+
+    // Caffeine - кэш
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+
     // Dotenv для .env файлов
     implementation 'io.github.cdimascio:dotenv-java:3.0.0'
 
@@ -26,9 +32,16 @@ dependencies {
     // Jackson для парсеров
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
 
+    // SLF4J Simple - для устранения warning
+    implementation 'org.slf4j:slf4j-simple:2.0.16'
+
     // JUnit для тестов
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // Mockito для мок-тестов
+    testImplementation 'org.mockito:mockito-core:5.10.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.10.0'
 }
 
 application {
@@ -58,7 +71,7 @@ test {
     useJUnitPlatform()
 }
 
-// ========== ДОБАВИТЬ ЭТО ==========
+// ========== Кодировка ==========
 compileJava {
     options.encoding = 'UTF-8'
 }

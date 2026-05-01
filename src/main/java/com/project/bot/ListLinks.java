@@ -6,22 +6,20 @@ import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
 import com.pengrad.telegrambot.model.request.ParseMode;
 import com.pengrad.telegrambot.request.AnswerCallbackQuery;
 import com.pengrad.telegrambot.request.SendMessage;
+import com.pengrad.telegrambot.response.SendResponse;
 import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
+import com.project.utils.Logger;
+import com.project.utils.ViewFormatter;
 
-import java.text.NumberFormat;
-import java.util.Comparator;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.project.bot.BotCallbacks.BACK;
-import static com.project.bot.BotMessages.BTN_BACK;
-
-// Обработчик кнопки "Список ссылок" — формирует и отправляет список видео из БД
 public class ListLinks {
-
+    private static final int MAX_MESSAGE_LENGTH = 4096;
     private final TelegramBot bot;
     private final VideoRepository videoRepository;
 
@@ -30,153 +28,165 @@ public class ListLinks {
         this.videoRepository = new VideoRepository();
     }
 
-    // Обрабатывает нажатие кнопки: загружает видео из БД и отправляет список в чат
     public void onClick(long chatId, String callbackQueryId) {
-        System.out.println("🔘 ListLinks.onClick ВЫЗВАН!");
-        System.out.println("   chatId: " + chatId);
-
-        // Убираем индикатор загрузки у кнопки на стороне клиента
-        bot.execute(new AnswerCallbackQuery(callbackQueryId));
+        Logger.info("ListLinks.onClick ВЫЗВАН! chatId: " + chatId);
 
         List<VideoStats> videos = videoRepository.findAll();
-        System.out.println("📊 Получено видео из БД: " + videos.size());
 
         if (videos.isEmpty()) {
-            bot.execute(new SendMessage(chatId, "📭 Список ссылок пуст. Добавьте первую ссылку!"));
+            String emptyMessage = "📭 Список ссылок пуст. Добавьте первую ссылку!";
+            sendMessage(chatId, emptyMessage, null);
+            answerCallback(callbackQueryId);
             return;
         }
 
-        StringBuilder message = new StringBuilder();
-
-        // Группируем видео по платформе (YOUTUBE, VK VIDEO, ...)
+        // Группируем по платформе
         Map<String, List<VideoStats>> groupedByPlatform = videos.stream()
-                .collect(Collectors.groupingBy(
-                        v -> normalizePlatformKey(v.getPlatform()),
-                        Collectors.toList()
-                ));
+                .collect(Collectors.groupingBy(VideoStats::getPlatform));
 
-        // Сортируем: YouTube первый, VK второй, остальные по алфавиту
-        List<String> sortedPlatforms = groupedByPlatform.keySet().stream()
-                .sorted(Comparator
-                        .comparingInt(ListLinks::platformOrderIndex)
-                        .thenComparing(String::compareToIgnoreCase))
-                .collect(Collectors.toList());
+        // Сортируем платформы
+        List<String> sortedPlatforms = new ArrayList<>(groupedByPlatform.keySet());
+        sortedPlatforms.sort((p1, p2) -> {
+            int order1 = getPlatformOrderIndex(p1);
+            int order2 = getPlatformOrderIndex(p2);
+            return Integer.compare(order1, order2);
+        });
 
-        int counter = 1; // Сквозной номер видео в списке
+        // Строим все части сообщения
+        List<String> allParts = new ArrayList<>();
+        StringBuilder currentPart = new StringBuilder();
+        currentPart.append("📋 <b>Ваши видео:</b>\n\n");
+
+        int totalLinks = videos.size();
+        long totalViews = videos.stream().mapToLong(VideoStats::getViewCount).sum();
+        int counter = 1;
 
         for (String platformKey : sortedPlatforms) {
             List<VideoStats> platformVideos = groupedByPlatform.get(platformKey);
-            if (platformVideos == null || platformVideos.isEmpty()) {
-                continue;
-            }
+            String platformHeader = getPlatformHeader(platformKey, platformVideos.size());
+            String headerWithNewlines = platformHeader + "\n\n";
 
-            // Заголовок секции, например: "YOUTUBE (3 видео)"
-            message.append(platformHeader(platformKey, platformVideos.size())).append("\n\n");
+            // Проверяем, влезет ли заголовок платформы
+            if (currentPart.length() + headerWithNewlines.length() > MAX_MESSAGE_LENGTH && currentPart.length() > 0) {
+                allParts.add(currentPart.toString());
+                currentPart = new StringBuilder();
+                currentPart.append("📋 <b>Ваши видео:</b>\n\n");
+            }
+            currentPart.append(headerWithNewlines);
 
             for (VideoStats video : platformVideos) {
-                // Экранируем HTML-символы перед вставкой в разметку
-                String title         = escapeHtml(video.getTitle());
-                String url           = escapeHtml(video.getVideoUrl());
-                String platformLabel = escapeHtml(platformLabel(platformKey, video.getPlatform()));
+                String title = ViewFormatter.escapeHtml(video.getTitle());
+                String url = video.getVideoUrl();
+                String platform = video.getPlatform();
+                String platformLabel = getPlatformLabel(platform, title);
+                String viewsFormatted = ViewFormatter.formatViews(video.getViewCount());
 
-                message.append(counter++).append(". ").append("<b>").append(title).append("</b>").append("\n");
-                message.append("   - ").append("▶️ ").append("<a href=\"").append(url).append("\">")
-                        .append("Смотреть на ").append(platformLabel).append("</a>").append("\n");
-                message.append("   - ").append("👁️ Просмотров: ").append(formatViews(video.getViewCount()));
-
-                // Предупреждаем, если платформа временно недоступна
-                if (video.isHostingUnavailable()) {
-                    message.append(" ⚠️ Платформа временно недоступна");
+                // Время обновления
+                String timeStr = "";
+                if (video.getLastUpdated() != null) {
+                    timeStr = "\n   🕐 Обновлено: " + video.getLastUpdated()
+                            .format(DateTimeFormatter.ofPattern("dd.MM HH:mm"));
                 }
-                message.append("\n\n");
+
+                String unavailableStr = "";
+                if (video.isHostingUnavailable()) {
+                    unavailableStr = " ⚠️ Платформа временно недоступна";
+                }
+
+                String videoEntry = counter++ + ". <b>" + title + "</b>\n" +
+                        "   ▶️ <a href=\"" + url + "\">Смотреть на " + platformLabel + "</a>\n" +
+                        "   📊 Просмотров: " + viewsFormatted + unavailableStr + timeStr + "\n\n";
+
+                // Если текущая запись не влезает - создаём новую часть
+                if (currentPart.length() + videoEntry.length() > MAX_MESSAGE_LENGTH) {
+                    // Добавляем текущую часть в список
+                    allParts.add(currentPart.toString());
+                    // Начинаем новую часть
+                    currentPart = new StringBuilder();
+                    currentPart.append("📋 <b>Ваши видео:</b>\n\n");
+                    currentPart.append(platformHeader + "\n\n");
+                }
+                currentPart.append(videoEntry);
             }
         }
 
-        // Итоговая статистика в конце сообщения
-        int totalLinks  = videos.size();
-        long totalViews = videoRepository.getTotalViews();
-        message.append("Общее количество видео: ").append(totalLinks).append("\n");
-        message.append("Общее количество просмотров: ").append(formatViews(totalViews));
+        // Добавляем итоговую статистику
+        String footer = "\n━━━━━━━━━━━━━━━━━━\n" +
+                "📊 <b>Итоговая статистика:</b>\n" +
+                "• Всего видео: " + totalLinks + "\n" +
+                "• Всего просмотров: " + ViewFormatter.formatViews(totalViews);
 
-        InlineKeyboardButton backButton = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
-        InlineKeyboardMarkup keyboard   = new InlineKeyboardMarkup(backButton);
+        if (currentPart.length() + footer.length() > MAX_MESSAGE_LENGTH) {
+            allParts.add(currentPart.toString());
+            currentPart = new StringBuilder();
+            currentPart.append("📋 <b>Ваши видео:</b>\n\n");
+        }
+        currentPart.append(footer);
+        allParts.add(currentPart.toString());
 
-        System.out.println("📨 Отправляем сообщение со списком и кнопкой возврата...");
+        // Отправляем все части
+        InlineKeyboardButton backButton = new InlineKeyboardButton(BotMessages.BTN_BACK)
+                .callbackData(BotCallbacks.BACK);
+        InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(backButton);
 
-        SendMessage request = new SendMessage(chatId, message.toString());
-        request.parseMode(ParseMode.HTML);
-        request.disableWebPagePreview(true); // Отключаем превью ссылок для компактности
-        request.replyMarkup(keyboard);
-        bot.execute(request);
+        for (int i = 0; i < allParts.size(); i++) {
+            String part = allParts.get(i);
+            String header = (allParts.size() > 1) ? "📄 Часть " + (i + 1) + "/" + allParts.size() + "\n\n" : "";
+            String messageText = header + part;
 
-        System.out.println("✅ Сообщение отправлено");
+            // Кнопку возврата добавляем только к последней части
+            InlineKeyboardMarkup partKeyboard = (i == allParts.size() - 1) ? keyboard : null;
+            sendMessage(chatId, messageText, partKeyboard);
+        }
+
+        answerCallback(callbackQueryId);
     }
 
-    // Заголовок секции платформы, например: "YOUTUBE (5 видео)"
-    private static String platformHeader(String platformKey, int count) {
-        return platformKey.toUpperCase(Locale.ROOT) + " (" + count + " видео)";
+    private void sendMessage(long chatId, String text, InlineKeyboardMarkup keyboard) {
+        SendMessage request = new SendMessage(chatId, text)
+                .parseMode(ParseMode.HTML)
+                .disableWebPagePreview(true);
+
+        if (keyboard != null) {
+            request.replyMarkup(keyboard);
+        }
+
+        SendResponse response = bot.execute(request);
+        if (!response.isOk()) {
+            Logger.error("Ошибка отправки сообщения: " + response.description());
+        }
     }
 
-    // Приоритет сортировки: YouTube=0, VK=1, остальные=2
-    private static int platformOrderIndex(String platformKey) {
-        String key = platformKey == null ? "" : platformKey.trim().toUpperCase(Locale.ROOT);
-        if ("YOUTUBE".equals(key)) {
-            return 0;
+    private void answerCallback(String callbackQueryId) {
+        if (callbackQueryId != null && !callbackQueryId.isEmpty()) {
+            AnswerCallbackQuery answer = new AnswerCallbackQuery(callbackQueryId);
+            bot.execute(answer);
         }
-        if ("VK".equals(key) || "VK VIDEO".equals(key) || "VKVIDEO".equals(key)) {
-            return 1;
-        }
-        return 2;
     }
 
-    // Приводит название платформы к единому ключу: null/"" → UNKNOWN, *youtube* → YOUTUBE, *vk* → VK VIDEO
-    private static String normalizePlatformKey(String platform) {
-        if (platform == null || platform.isBlank()) {
-            return "UNKNOWN";
+    private int getPlatformOrderIndex(String platform) {
+        switch (platform) {
+            case "YouTube": return 1;
+            case "VK": return 2;
+            default: return 999;
         }
-        String normalized = platform.trim();
-        String upper = normalized.toUpperCase(Locale.ROOT);
-        if (upper.contains("YOUTUBE")) {
-            return "YOUTUBE";
-        }
-        if (upper.equals("VK") || upper.contains("VK")) {
-            return "VK VIDEO";
-        }
-        return upper;
     }
 
-    // Читаемое название платформы для отображения в ссылке ("YouTube", "VK Video" или оригинал)
-    private static String platformLabel(String platformKey, String rawPlatform) {
-        String key = platformKey == null ? "" : platformKey.trim().toUpperCase(Locale.ROOT);
-        if ("YOUTUBE".equals(key)) {
-            return "YouTube";
+    private String getPlatformHeader(String platform, int count) {
+        String icon;
+        switch (platform) {
+            case "YouTube": icon = "▶️"; break;
+            case "VK": icon = "📱"; break;
+            default: icon = "🌐"; break;
         }
-        if ("VK".equals(key) || "VK VIDEO".equals(key) || "VKVIDEO".equals(key)) {
-            return "VK Video";
-        }
-        if (rawPlatform == null || rawPlatform.trim().isEmpty()) {
-            return "Unknown";
-        }
-        return rawPlatform.trim();
+        return icon + " <b>" + platform + "</b> (" + count + " видео)";
     }
 
-    // Форматирует число с разделителями тысяч (1234567 → "1 234 567")
-    // U+00A0 (неразрывный пробел) заменяется на обычный — Telegram его не отображает корректно
-    private static String formatViews(long views) {
-        String formatted = NumberFormat.getInstance(new Locale("ru", "RU")).format(views);
-        return formatted.replace('\u00A0', ' ');
-    }
-
-    // Экранирует HTML-спецсимволы (&, <, >, ", ') для безопасной вставки в разметку Telegram
-    private static String escapeHtml(String text) {
-        if (text == null) {
-            return "";
+    private String getPlatformLabel(String platform, String title) {
+        switch (platform) {
+            case "YouTube": return "YouTube";
+            case "VK": return "VK Video";
+            default: return platform;
         }
-        return text
-                .replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;")
-                .replace("'", "&#39;");
     }
 }

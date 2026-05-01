@@ -1,127 +1,156 @@
 package com.project.repository;
 
+import com.project.utils.Logger;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import io.github.cdimascio.dotenv.Dotenv;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
 
-// Установление подключения к PostgreSQL через JDBC
-// Создание DataSource для управления соединениями
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 
 public class DbConnection {
-    private static Connection connection = null;
-    private static final Dotenv dotenv = Dotenv.load();
+    private static HikariDataSource dataSource;
 
-    // Формируем URL подключения из переменных .env
-    private static String getDbUrl() {
-        String host = dotenv.get("DB_HOST");
-        String port = dotenv.get("DB_PORT");
-        String dbName = dotenv.get("DB_NAME");
-        return String.format("jdbc:postgresql://%s:%s/%s", host, port, dbName);
+    static {
+        try {
+            Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
+
+            String host = dotenv.get("DB_HOST");
+            String port = dotenv.get("DB_PORT");
+            String dbName = dotenv.get("DB_NAME");
+            String user = dotenv.get("DB_USER");
+            String password = dotenv.get("DB_PASSWORD");
+
+            String jdbcUrl = String.format("jdbc:postgresql://%s:%s/%s", host, port, dbName);
+
+            HikariConfig config = new HikariConfig();
+            config.setJdbcUrl(jdbcUrl);
+            config.setUsername(user);
+            config.setPassword(password);
+            config.setMaximumPoolSize(10);
+            config.setMinimumIdle(2);
+            config.setConnectionTimeout(30000);
+            config.setIdleTimeout(600000);
+            config.setMaxLifetime(1800000);
+
+            Class.forName("org.postgresql.Driver");
+
+            dataSource = new HikariDataSource(config);
+            Logger.info("Пул соединений с БД инициализирован");
+
+            initDatabase();
+
+        } catch (ClassNotFoundException e) {
+            Logger.error("Драйвер PostgreSQL не найден", e);
+            throw new RuntimeException("Драйвер PostgreSQL не найден", e);
+        } catch (Exception e) {
+            Logger.error("Ошибка инициализации пула соединений: " + e.getMessage(), e);
+            throw new RuntimeException("Ошибка инициализации пула соединений", e);
+        }
     }
 
-    private static String getDbUser() {
-        return dotenv.get("DB_USER");
-    }
-
-    private static String getDbPassword() {
-        return dotenv.get("DB_PASSWORD");
-    }
-
-    // Получить соединение с БД (одиночка)
     public static Connection getConnection() throws SQLException {
-        if (connection == null || connection.isClosed()) {
-            try {
-                // Загружаем драйвер PostgreSQL
-                Class.forName("org.postgresql.Driver");
-
-                System.out.println("Подключение к БД: " + getDbUrl());
-
-
-                // Создаем соединение
-                connection = DriverManager.getConnection(
-                        getDbUrl(),
-                        getDbUser(),
-                        getDbPassword()
-                );
-                System.out.println("Подключение к PostgreSQL установлено");
-
-            } catch (ClassNotFoundException e) {
-                System.err.println("Драйвер PostgreSQL не найден. Добавьте зависимость в build.gradle");
-                throw new SQLException("Driver not found", e);
-            } catch (SQLException e) {
-                System.err.println("Ошибка подключения к БД: " + e.getMessage());
-                throw e;
-            }
+        if (dataSource == null) {
+            throw new SQLException("Пул соединений не инициализирован");
         }
-        return connection;
+        return dataSource.getConnection();
     }
 
-    // Закрыть соединение
-    public static void closeConnection() {
-        if (connection != null) {
-            try {
-                connection.close();
-                connection = null;
-                System.out.println("Подключение к БД закрыто");
-            } catch (SQLException e) {
-                System.err.println("Ошибка при закрытии подключения: " + e.getMessage());
-            }
-        }
-    }
+    public static void initDatabase() {
+        String sql = """
+            -- Таблица videos
+            CREATE TABLE IF NOT EXISTS videos (
+                id SERIAL PRIMARY KEY,
+                link TEXT NOT NULL UNIQUE,
+                platform VARCHAR(50) NOT NULL,
+                title TEXT NOT NULL,
+                views_count BIGINT NOT NULL DEFAULT 0,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                hosting_unavailable BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+            
+            -- Таблица vk
+            CREATE TABLE IF NOT EXISTS vk (
+                id SERIAL PRIMARY KEY,
+                video_link TEXT NOT NULL UNIQUE,
+                id_vk VARCHAR(50),
+                id_vk_external VARCHAR(50),
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+            
+            -- Таблица youtube
+            CREATE TABLE IF NOT EXISTS youtube (
+                id SERIAL PRIMARY KEY,
+                video_link TEXT NOT NULL UNIQUE,
+                id_youtube VARCHAR(50),
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+            
+            -- Таблица истории просмотров
+            CREATE TABLE IF NOT EXISTS views_history (
+                id SERIAL PRIMARY KEY,
+                video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+                views_count BIGINT NOT NULL,
+                recorded_at TIMESTAMP DEFAULT NOW()
+            );
+            
+            -- Индексы для videos
+            CREATE INDEX IF NOT EXISTS idx_videos_platform ON videos(platform);
+            CREATE INDEX IF NOT EXISTS idx_videos_last_updated ON videos(last_updated);
+            CREATE INDEX IF NOT EXISTS idx_videos_views_count ON videos(views_count DESC);
+            CREATE INDEX IF NOT EXISTS idx_videos_hosting_unavailable ON videos(hosting_unavailable);
+            
+            -- Индексы для vk
+            CREATE INDEX IF NOT EXISTS idx_vk_video_link ON vk(video_link);
+            CREATE INDEX IF NOT EXISTS idx_vk_id_vk ON vk(id_vk);
+            
+            -- Индексы для youtube
+            CREATE INDEX IF NOT EXISTS idx_youtube_video_link ON youtube(video_link);
+            CREATE INDEX IF NOT EXISTS idx_youtube_id_youtube ON youtube(id_youtube);
+            
+            -- Индексы для views_history
+            CREATE INDEX IF NOT EXISTS idx_views_history_video_id ON views_history(video_id);
+            CREATE INDEX IF NOT EXISTS idx_views_history_recorded_at ON views_history(recorded_at DESC);
+        """;
 
-    // Проверить подключение
-    public static boolean isConnected() {
-        try {
-            return connection != null && !connection.isClosed();
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement()) {
+            stmt.execute(sql);
+            Logger.info("Таблицы БД инициализированы");
         } catch (SQLException e) {
-            return false;
+            Logger.error("Ошибка инициализации БД: " + e.getMessage(), e);
         }
     }
 
-    // Проверка доступности БД с возвратом статуса
     public static boolean isDatabaseAvailable() {
-        try {
-            Connection conn = getConnection();
-            boolean isConnected = conn != null && !conn.isClosed();
-            closeConnection();
-            return isConnected;
+        try (Connection conn = getConnection()) {
+            return conn != null && !conn.isClosed();
         } catch (SQLException e) {
-            System.err.println("❌ БД недоступна: " + e.getMessage());
+            Logger.warn("БД недоступна: " + e.getMessage());
             return false;
         }
     }
 
-    public static void testConnection() {
-        System.out.println("\n=== ТЕСТ ПОДКЛЮЧЕНИЯ К БД ===\n");
-
-        try {
-            // Пытаемся подключиться
-            Connection conn = getConnection();
-
-            if (conn != null && !conn.isClosed()) {
-                System.out.println("✅ ПОДКЛЮЧЕНИЕ УСПЕШНО!");
-                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                System.out.println("📊 Информация о подключении:");
-                System.out.println("   URL: " + conn.getMetaData().getURL());
-                System.out.println("   Версия БД: " + conn.getMetaData().getDatabaseProductVersion());
-                System.out.println("   Драйвер: " + conn.getMetaData().getDriverName());
-                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            } else {
-                System.out.println("❌ Не удалось получить подключение");
-            }
-
-        } catch (SQLException e) {
-            System.out.println("❌ ОШИБКА ПОДКЛЮЧЕНИЯ!");
-            System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            System.out.println("Сообщение: " + e.getMessage());
-            System.out.println("\nВозможные причины:");
-            System.out.println("   1. PostgreSQL не запущен");
-            System.out.println("   2. Неправильные параметры в .env");
-            System.out.println("   3. База данных не существует");
-            System.out.println("   4. Неверный пароль");
-            System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            e.printStackTrace();
+    public static void closePool() {
+        if (dataSource != null && !dataSource.isClosed()) {
+            dataSource.close();
+            Logger.info("Пул соединений с БД закрыт");
         }
+    }
+
+    public static String getDbUrl() {
+        return dataSource != null ? dataSource.getJdbcUrl() : null;
+    }
+
+    public static String getDbUser() {
+        return dataSource != null ? dataSource.getUsername() : null;
+    }
+
+    public static String getDbPassword() {
+        return dataSource != null ? dataSource.getPassword() : null;
     }
 }
