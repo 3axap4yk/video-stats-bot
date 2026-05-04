@@ -10,7 +10,7 @@ import com.pengrad.telegrambot.response.SendResponse; // Ответ от Telegra
 import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
 import com.project.service.StatisticsService;
-import com.project.service.YouTubeException;
+import com.project.service.VideoException;
 import com.project.utils.Logger;
 
 import java.util.List;
@@ -106,7 +106,7 @@ public class RefreshStatsLinks {
                 totalViews += newViewCount;
                 Thread.sleep(YOUTUBE_API_RATE_LIMIT_DELAY_MS); // Пауза между запросами
 
-            } catch (YouTubeException | InterruptedException e) {
+            } catch (VideoException | InterruptedException e) {
                 errorCount++;
                 Logger.error("Ошибка обновления: " + video.getVideoUrl() + " - " + e.getMessage());
                 totalViews += video.getViewCount();
