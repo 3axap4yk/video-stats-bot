@@ -90,7 +90,7 @@ public class ListLinks {
 
                 String unavailableStr = "";
                 if (video.isHostingUnavailable()) {
-                    unavailableStr = " ⚠️ Платформа временно недоступна";
+                    unavailableStr = " ⚠️ Видео недоступно";
                 }
 
                 String videoEntry = counter++ + ". <b>" + title + "</b>\n" +
