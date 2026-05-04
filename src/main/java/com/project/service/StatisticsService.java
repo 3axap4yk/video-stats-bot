@@ -38,11 +38,11 @@ public class StatisticsService {
         }
     }
 
-    private HostingType detectedHostingType (String videoUrl) {
+    private HostingType detectedHostingType(String videoUrl) {
         String lowerUrl = videoUrl.toLowerCase();
         if (lowerUrl.contains("youtube.com") || lowerUrl.contains("youtu.be")) {
             return HostingType.YOUTUBE;
-        } else if (lowerUrl.contains("vk.com") || lowerUrl.contains("vkvideo")) {
+        } else if (lowerUrl.contains("vk.com") || lowerUrl.contains("vkvideo") || lowerUrl.contains("?z=video")) {
             return HostingType.VK;
         }
         throw new IllegalArgumentException("Неизвестный видеохостинг. Поддерживаются YouTube и VK Video");
@@ -82,38 +82,19 @@ public class StatisticsService {
             String[] parts = videoUrl.split("/video");
             if (parts.length > 1) {
                 String idPart = parts[1];
-                if (idPart.contains("?")) {
-                    idPart = idPart.split("\\?")[0];
-                }
-                if (idPart.contains("&")) {
-                    idPart = idPart.split("&")[0];
-                }
+                if (idPart.contains("?")) idPart = idPart.split("\\?")[0];
+                if (idPart.contains("&")) idPart = idPart.split("&")[0];
                 videoId = idPart;
             }
-        } else if (videoUrl.contains("video?z=video")) {
-            String[] parts = videoUrl.split("video\\?z=video");
-            if (parts.length > 1) {
-                String idPart = parts[1];
-                if (idPart.contains("&")) {
-                    idPart = idPart.split("&")[0];
-                }
-                videoId = idPart;
-            }
-        } else if (videoUrl.contains("vk.com/")) {
-            String[] segments = videoUrl.split("/");
-            for (String segment : segments) {
-                if (segment.startsWith("video")) {
-                    videoId = segment;
-                    if (videoId.contains("?")) {
-                        videoId = videoId.split("\\?")[0];
-                    }
-                    break;
-                }
-            }
-        } else if (videoUrl.contains("?z=video")) {
+        }
+
+        if (videoId == null && videoUrl.contains("?z=video")) {
             String[] parts = videoUrl.split("\\?z=video");
             if (parts.length > 1) {
-                String rawId = parts[1].split("%2F")[0];
+                String rawId = parts[1];
+                if (rawId.contains("%2F")) {
+                    rawId = rawId.split("%2F")[0];
+                }
                 if (rawId.contains("&")) {
                     rawId = rawId.split("&")[0];
                 }
@@ -121,7 +102,16 @@ public class StatisticsService {
             }
         }
 
-        // Валидация формата ID для VK (должен содержать _)
+        if (videoId == null && videoUrl.contains("video?z=video")) {
+            String[] parts = videoUrl.split("video\\?z=video");
+            if (parts.length > 1) {
+                String idPart = parts[1];
+                if (idPart.contains("%2F")) idPart = idPart.split("%2F")[0];
+                if (idPart.contains("&")) idPart = idPart.split("&")[0];
+                videoId = idPart;
+            }
+        }
+
         if (videoId != null && !videoId.contains("_")) {
             videoId = null;
         }
