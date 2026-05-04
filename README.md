@@ -118,8 +118,8 @@
 - Доступ к Telegram API.
 
 ### Учётные записи и ключи
-- **Telegram Bot Token** — получить у [@BotFather](https://t.me/BotFather) (создать бота и скопировать токен);
-- **YouTube Data API Key** — получить в [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (включить YouTube Data API v3 и создать API-ключ);
+- **Telegram Bot Token** — получить у [@BotFather](https://t.me/BotFather);
+- **YouTube Data API Key** — получить в [Google Cloud Console](https://console.cloud.google.com/apis/credentials), квота составляет 10 000 запросов в сутки;
 - **PostgreSQL** (опционально, если не используете Docker-образ) — база данных.
 
 #### Как получить Telegram Bot Token
