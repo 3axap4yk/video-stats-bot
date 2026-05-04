@@ -23,14 +23,16 @@ import static com.project.bot.BotMessages.*;
 import static com.project.utils.FormatUtils.formatViews;
 
 /**
- * Обработчик добавления новых ссылок на видео
+ * Обработчик добавления новых ссылок на видео.
+ * Управляет состоянием ожидания URL от пользователя и обрабатывает ввод.
  */
 public class AddLinks {
 
     private final TelegramBot bot;
     private final UrlResolver urlResolver;
-    private final LongConsumer showStartDialog;
+    private final LongConsumer showStartDialog; // Колбэк для возврата в главное меню
     private final VideoRepository videoRepository = new VideoRepository();
+    // Хранит ID чатов, которые сейчас находятся в режиме ожидания ввода ссылки
     private final Set<Long> chatsAwaitingUrl = ConcurrentHashMap.newKeySet();
 
     public AddLinks(TelegramBot bot, UrlResolver urlResolver, LongConsumer showStartDialog) {
@@ -39,22 +41,26 @@ public class AddLinks {
         this.showStartDialog = showStartDialog;
     }
 
+    // Проверяет, ожидает ли чат ввода ссылки
     public boolean isAwaitingUrl(long chatId) {
         return chatsAwaitingUrl.contains(chatId);
     }
 
+    // Принудительно выводит чат из режима ожидания
     public void resetChat(long chatId) {
         chatsAwaitingUrl.remove(chatId);
     }
 
+    // Активирует режим ожидания URL и отправляет prompt с кнопкой отмены
     public void onAddLinkClick(long chatId, String callbackQueryId) {
         chatsAwaitingUrl.add(chatId);
         InlineKeyboardButton cancelBtn = new InlineKeyboardButton(BTN_CANCEL).callbackData(CANCEL);
         InlineKeyboardMarkup cancelKeyboard = new InlineKeyboardMarkup(cancelBtn);
-        bot.execute(new AnswerCallbackQuery(callbackQueryId));
+        bot.execute(new AnswerCallbackQuery(callbackQueryId)); // Закрываем "часики" на кнопке
         bot.execute(new SendMessage(chatId, PROMPT_SEND_URL).replyMarkup(cancelKeyboard));
     }
 
+    // Отмена добавления: выходит из режима ожидания и возвращает в меню
     public void onCancel(long chatId, String callbackQueryId) {
         chatsAwaitingUrl.remove(chatId);
         bot.execute(new AnswerCallbackQuery(callbackQueryId));
@@ -62,37 +68,48 @@ public class AddLinks {
         showStartDialog.accept(chatId);
     }
 
+    // Возврат назад: аналогично отмене, но без сообщения об отмене
     public void onBack(long chatId, String callbackQueryId) {
         chatsAwaitingUrl.remove(chatId);
         bot.execute(new AnswerCallbackQuery(callbackQueryId));
         showStartDialog.accept(chatId);
     }
 
+    /**
+     * Обрабатывает присланную пользователем ссылку.
+     * Выполняет валидацию, проверку платформы, получение статистики и сохранение.
+     */
     public void onSubmittedUrl(long chatId, String rawUrl) {
+        // Нормализация: удаляем пробелы по краям и внутри URL
         String normalizedUrl = rawUrl == null ? "" : rawUrl.trim();
         normalizedUrl = normalizedUrl.replaceAll("\\s+", "");
 
+        // Проверка формата URL
         if (!urlResolver.isValidUrl(normalizedUrl)) {
             bot.execute(new SendMessage(chatId, INVALID_URL).replyMarkup(buildCancelKeyboard()));
             return;
         }
 
+        // Определение платформы (YouTube, VK и т.д.)
         UrlResolver.Platform platform = urlResolver.resolvePlatform(normalizedUrl);
         if (platform == UrlResolver.Platform.UNKNOWN) {
             bot.execute(new SendMessage(chatId, UNSUPPORTED_PLATFORM).replyMarkup(buildCancelKeyboard()));
             return;
         }
 
+        // Проверка существования видео/ресурса по ссылке
         if (!urlResolver.pointsToExistingVideo(normalizedUrl)) {
             bot.execute(new SendMessage(chatId, DEAD_LINK).replyMarkup(buildCancelKeyboard()));
             return;
         }
 
+        // VK не поддерживается для получения статистики
         if (platform == UrlResolver.Platform.VK) {
             bot.execute(new SendMessage(chatId, VK_STATS_NOT_SUPPORTED).replyMarkup(buildCancelKeyboard()));
             return;
         }
 
+        // Отправляем временное сообщение о процессе загрузки
         Integer progressMessageId = sendProgressMessage(chatId);
         try {
             StatisticsService statsService;
@@ -115,8 +132,10 @@ public class AddLinks {
                 return;
             }
 
+            // Данные получены — выходим из режима ожидания URL
             chatsAwaitingUrl.remove(chatId);
 
+            // Заполняем объект статистики
             VideoStats stats = new VideoStats();
             stats.setVideoUrl(normalizedUrl);
             stats.setPlatform("YouTube");
@@ -124,9 +143,11 @@ public class AddLinks {
             stats.setViewCount(viewCount);
             stats.setHostingUnavailable(false);
 
+            // Клавиатура с кнопкой "Назад"
             InlineKeyboardButton backBtn = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
             InlineKeyboardMarkup backKeyboard = new InlineKeyboardMarkup(backBtn);
 
+            // Проверка на дубликат
             VideoStats existing = videoRepository.findByUrl(stats.getVideoUrl());
             if (existing != null) {
                 String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
@@ -135,15 +156,18 @@ public class AddLinks {
                 return;
             }
 
+            // Сохранение в БД и вывод результата
             videoRepository.save(stats);
             String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
                     + "\n\nСсылка добавлена.";
             bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
         } finally {
+            // Удаляем сообщение о прогрессе в любом случае
             deleteMessageIfPresent(chatId, progressMessageId);
         }
     }
 
+    // Отправляет сообщение "Запрос выполняется..." и возвращает его ID
     private Integer sendProgressMessage(long chatId) {
         SendResponse response = bot.execute(new SendMessage(chatId, REQUEST_IN_PROGRESS));
         if (response.isOk() && response.message() != null) {
@@ -152,6 +176,7 @@ public class AddLinks {
         return null;
     }
 
+    // Удаляет сообщение по ID, если оно существует
     private void deleteMessageIfPresent(long chatId, Integer messageId) {
         if (messageId == null) {
             return;
@@ -159,6 +184,7 @@ public class AddLinks {
         bot.execute(new DeleteMessage(chatId, messageId));
     }
 
+    // Создаёт клавиатуру с единственной кнопкой "Отмена"
     private InlineKeyboardMarkup buildCancelKeyboard() {
         InlineKeyboardButton cancelBtn = new InlineKeyboardButton(BTN_CANCEL).callbackData(CANCEL);
         return new InlineKeyboardMarkup(cancelBtn);

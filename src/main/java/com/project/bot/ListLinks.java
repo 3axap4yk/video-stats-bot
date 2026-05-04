@@ -21,9 +21,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Обработчик постраничного просмотра списка сохранённых ссылок.
+ * Поддерживает навигацию, группировку по платформам и итоговую статистику.
+ */
 public class ListLinks {
 
-    private static final int PAGE_SIZE = 5;
+    private static final int PAGE_SIZE = 5; // Количество видео на одной странице
     // Префикс callbackData для навигации: "LIST_PAGE:N"
     public static final String PAGE_CALLBACK_PREFIX = "LIST_PAGE:";
 
@@ -37,17 +41,20 @@ public class ListLinks {
 
     // ───── Первый показ (кнопка "Список ссылок") ─────────────────────────────
 
+    // Обрабатывает клик по кнопке "Список ссылок" в главном меню
     public void onClick(long chatId, String callbackQueryId) {
         Logger.info("ListLinks.onClick chatId=" + chatId);
 
         List<VideoStats> videos = loadSortedVideos();
 
+        // Если список пуст — выводим сообщение без клавиатуры
         if (videos.isEmpty()) {
             sendMessage(chatId, "📭 Список ссылок пуст. Добавьте первую ссылку!", null);
             answerCallback(callbackQueryId);
             return;
         }
 
+        // Формируем первую страницу и клавиатуру с навигацией
         String text = buildPage(videos, 0);
         InlineKeyboardMarkup keyboard = buildKeyboard(videos.size(), 0);
 
@@ -57,6 +64,7 @@ public class ListLinks {
 
     // ───── Навигация по страницам ─────────────────────────────────────────────
 
+    // Обрабатывает переключение страниц через инлайн-кнопки
     public void onPageChange(long chatId, int messageId, int page, String callbackQueryId) {
         List<VideoStats> videos = loadSortedVideos();
 
@@ -68,6 +76,7 @@ public class ListLinks {
         String text = buildPage(videos, page);
         InlineKeyboardMarkup keyboard = buildKeyboard(videos.size(), page);
 
+        // Редактируем существующее сообщение вместо отправки нового
         EditMessageText request = new EditMessageText(chatId, messageId, text)
                 .parseMode(ParseMode.HTML)
                 .disableWebPagePreview(true)
@@ -83,6 +92,7 @@ public class ListLinks {
 
     // ───── Построение текста страницы ─────────────────────────────────────────
 
+    // Формирует текст страницы с группировкой по платформам
     private String buildPage(List<VideoStats> videos, int page) {
         int totalPages = totalPages(videos.size());
         int from = page * PAGE_SIZE;                          // включительно
@@ -96,7 +106,7 @@ public class ListLinks {
         for (int i = from; i < to; i++) {
             VideoStats v = videos.get(i);
 
-            // Заголовок платформы — при первом появлении на этой странице
+            // Заголовок платформы — выводим при смене платформы на странице
             if (!v.getPlatform().equals(prevPlatform)) {
                 if (prevPlatform != null) sb.append("\n"); // отступ между группами
                 sb.append(getPlatformHeader(v.getPlatform())).append("\n\n");
@@ -122,7 +132,7 @@ public class ListLinks {
             sb.append("\n\n");
         }
 
-        // Итоговая статистика на последней странице
+        // Итоговая статистика — только на последней странице
         if (page == totalPages - 1) {
             long totalViews = videos.stream().mapToLong(VideoStats::getViewCount).sum();
             sb.append("━━━━━━━━━━━━━━━━━━\n")
@@ -135,20 +145,24 @@ public class ListLinks {
 
     // ───── Клавиатура ─────────────────────────────────────────────────────────
 
+    // Строит клавиатуру с кнопками навигации и "Назад"
     private InlineKeyboardMarkup buildKeyboard(int totalVideos, int currentPage) {
         int totalPages = totalPages(totalVideos);
 
         List<InlineKeyboardButton> navRow = new ArrayList<>();
 
+        // Кнопка "Назад" — если не первая страница
         if (currentPage > 0) {
             navRow.add(new InlineKeyboardButton("◀️ Назад")
                     .callbackData(PAGE_CALLBACK_PREFIX + (currentPage - 1)));
         }
 
+        // Индикатор текущей страницы (неактивная кнопка)
         navRow.add(new InlineKeyboardButton(
                 (currentPage + 1) + " / " + totalPages)
-                .callbackData("LIST_PAGE_NOOP")); // индикатор, не нажимается
+                .callbackData("LIST_PAGE_NOOP"));
 
+        // Кнопка "Вперёд" — если не последняя страница
         if (currentPage < totalPages - 1) {
             navRow.add(new InlineKeyboardButton("Вперёд ▶️")
                     .callbackData(PAGE_CALLBACK_PREFIX + (currentPage + 1)));
@@ -157,6 +171,7 @@ public class ListLinks {
         InlineKeyboardButton backButton = new InlineKeyboardButton(BotMessages.BTN_BACK)
                 .callbackData(BotCallbacks.BACK);
 
+        // Первый ряд — навигация, второй — кнопка "Назад"
         return new InlineKeyboardMarkup(
                 navRow.toArray(new InlineKeyboardButton[0]),
                 new InlineKeyboardButton[]{backButton}
@@ -166,12 +181,13 @@ public class ListLinks {
     // ───── Загрузка и сортировка ──────────────────────────────────────────────
 
     /**
-     * Возвращает плоский список, отсортированный по платформе (YouTube → VK → прочие).
+     * Загружает все видео и сортирует по платформе: YouTube → VK → прочие.
      * Внутри платформы порядок сохраняется из БД.
      */
     private List<VideoStats> loadSortedVideos() {
         List<VideoStats> all = videoRepository.findAll();
 
+        // Группируем по платформе с сохранением порядка через LinkedHashMap
         Map<String, List<VideoStats>> grouped = all.stream()
                 .collect(Collectors.groupingBy(
                         VideoStats::getPlatform,
@@ -179,11 +195,13 @@ public class ListLinks {
                         Collectors.toList()
                 ));
 
+        // Сортируем ключи (платформы) в нужном порядке
         List<String> sorted = new ArrayList<>(grouped.keySet());
         sorted.sort((a, b) -> Integer.compare(
                 getPlatformOrderIndex(a),
                 getPlatformOrderIndex(b)));
 
+        // Собираем плоский список
         List<VideoStats> result = new ArrayList<>();
         for (String platform : sorted) {
             result.addAll(grouped.get(platform));
@@ -193,10 +211,12 @@ public class ListLinks {
 
     // ───── Вспомогательные ────────────────────────────────────────────────────
 
+    // Вычисляет общее количество страниц
     private int totalPages(int totalVideos) {
         return (int) Math.ceil((double) totalVideos / PAGE_SIZE);
     }
 
+    // Отправляет новое сообщение с HTML-разметкой
     private void sendMessage(long chatId, String text, InlineKeyboardMarkup keyboard) {
         SendMessage request = new SendMessage(chatId, text)
                 .parseMode(ParseMode.HTML)
@@ -209,12 +229,14 @@ public class ListLinks {
         }
     }
 
+    // Подтверждает обработку callback-запроса (убирает "часики")
     private void answerCallback(String callbackQueryId) {
         if (callbackQueryId != null && !callbackQueryId.isEmpty()) {
             bot.execute(new AnswerCallbackQuery(callbackQueryId));
         }
     }
 
+    // Возвращает индекс для сортировки платформ
     private int getPlatformOrderIndex(String platform) {
         switch (platform) {
             case "YouTube": return 1;
@@ -223,6 +245,7 @@ public class ListLinks {
         }
     }
 
+    // Возвращает заголовок группы платформы с иконкой
     private String getPlatformHeader(String platform) {
         switch (platform) {
             case "YouTube": return "▶️ <b>YouTube</b>";
@@ -231,6 +254,7 @@ public class ListLinks {
         }
     }
 
+    // Возвращает читаемое название платформы для ссылки
     private String getPlatformLabel(String platform) {
         switch (platform) {
             case "YouTube": return "YouTube";
