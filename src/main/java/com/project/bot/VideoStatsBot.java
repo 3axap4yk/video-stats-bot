@@ -112,13 +112,11 @@ public class VideoStatsBot {
 
         if (text.equals("/start")) {
             Logger.info("Команда /start от чата: " + chatId);
+            addLinks.resetChat(chatId);
             sendStartDialog(chatId);
         } else if (text.startsWith("/")) {
             return;
         } else if (addLinks.isAwaitingUrl(chatId)) {
-            Logger.info("Получена ссылка от чата: " + chatId + " -> " + text);
-            addLinks.onSubmittedUrl(chatId, text.trim());
-        } else {
             Logger.info("Получена ссылка от чата: " + chatId + " -> " + text);
             addLinks.onSubmittedUrl(chatId, text.trim());
         }
