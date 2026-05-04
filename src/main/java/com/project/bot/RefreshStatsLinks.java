@@ -3,9 +3,10 @@ package com.project.bot;
 import com.pengrad.telegrambot.TelegramBot;
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton;
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup;
-import com.pengrad.telegrambot.model.request.ParseMode;
 import com.pengrad.telegrambot.request.AnswerCallbackQuery;
+import com.pengrad.telegrambot.request.DeleteMessage; // Запрос на удаление сообщения из чата
 import com.pengrad.telegrambot.request.SendMessage;
+import com.pengrad.telegrambot.response.SendResponse; // Ответ от Telegram после отправки сообщения (содержит messageId)
 import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
 import com.project.service.StatisticsService;
@@ -34,24 +35,36 @@ public class RefreshStatsLinks {
 
     public void onClick(long chatId, String callbackQueryId, int messageId) {
         bot.execute(new AnswerCallbackQuery(callbackQueryId));
-        bot.execute(new SendMessage(chatId, "🔄 Обновляю статистику всех видео... Это может занять несколько секунд."));
+
+        // Сохраняем ответ, чтобы получить messageId загрузочного сообщения
+        SendResponse response = bot.execute(
+                new SendMessage(chatId, "🔄 Обновляю статистику всех видео... Это может занять несколько секунд.")
+        );
+        // messageId нужен для последующего удаления этого сообщения
+        int loadingMessageId = response.message().messageId();
 
         CompletableFuture.runAsync(() -> {
             try {
-                performUpdate(chatId);
+                // Передаём loadingMessageId в фоновый поток
+                performUpdate(chatId, loadingMessageId);
             } catch (Exception e) {
                 Logger.error("Ошибка в фоновом обновлении: " + e.getMessage());
+                // Удаляем загрузочное сообщение при ошибке, чтобы оно не зависало
+                bot.execute(new DeleteMessage(chatId, loadingMessageId));
                 bot.execute(new SendMessage(chatId, "❌ Произошла ошибка при обновлении статистики. Попробуйте позже."));
             }
         });
     }
 
-    private void performUpdate(long chatId) {
+    // Принимаем loadingMessageId для управления загрузочным сообщением
+    private void performUpdate(long chatId, int loadingMessageId) {
         Logger.info("Начинаю фоновое обновление статистики для чата: " + chatId);
 
         List<VideoStats> videos = videoRepository.findAll();
 
         if (videos.isEmpty()) {
+            // Удаляем загрузочное сообщение перед отправкой ответа о пустом списке
+            bot.execute(new DeleteMessage(chatId, loadingMessageId));
             bot.execute(new SendMessage(chatId, "📭 Список ссылок пуст. Сначала добавьте видео через 'Добавить ссылку'."));
             return;
         }
@@ -102,7 +115,15 @@ public class RefreshStatsLinks {
                 updatedCount, errorCount, videos.size(), formatViews(totalViews)
         );
 
-        bot.execute(new SendMessage(chatId, resultMessage));
+        // Кнопка "Вернуться" с callback BACK для возврата в главное меню
+        InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(
+                new InlineKeyboardButton(BTN_BACK).callbackData(BACK)
+        );
+
+        // Удаляем загрузочное сообщение перед отправкой итогового результата
+        bot.execute(new DeleteMessage(chatId, loadingMessageId));
+        // Отправляем итоговое сообщение с кнопкой "Вернуться"
+        bot.execute(new SendMessage(chatId, resultMessage).replyMarkup(keyboard));
         Logger.success("Фоновое обновление завершено для чата: " + chatId);
     }
 
