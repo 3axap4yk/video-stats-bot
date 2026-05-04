@@ -7,6 +7,7 @@ public final class BotCallbacks {
     public static final String CANCEL = "cancel_btn";
     public static final String BACK = "back_btn";
     public static final String STATS = "stats_btn";
+    public static final String LIST_PAGE_NOOP = "LIST_PAGE_NOOP";
 
     private BotCallbacks() {
     }
