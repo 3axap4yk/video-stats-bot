@@ -218,7 +218,7 @@ public class UrlResolver {
             int statusCode = connection.getResponseCode();
             connection.disconnect();
 
-            return statusCode >= 200 && statusCode < 300;
+            return statusCode >= 200 && statusCode < 300 || statusCode == 401;
         } catch (Exception e) {
             return false;
         }
