@@ -110,6 +110,15 @@ public class StatisticsService {
                     break;
                 }
             }
+        } else if (videoUrl.contains("?z=video")) {
+            String[] parts = videoUrl.split("\\?z=video");
+            if (parts.length > 1) {
+                String rawId = parts[1].split("%2F")[0];
+                if (rawId.contains("&")) {
+                    rawId = rawId.split("&")[0];
+                }
+                videoId = rawId;
+            }
         }
 
         // Валидация формата ID для VK (должен содержать _)
