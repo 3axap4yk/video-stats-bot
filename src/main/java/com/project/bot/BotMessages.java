@@ -2,7 +2,7 @@ package com.project.bot;
 
 public final class BotMessages {
     public static final String ACCESS_DENIED = "У вас нет доступа к этому боту.";
-    public static final String GREETING = "Приветствую!";
+    public static final String GREETING = "Доступные команды:";
     public static final String PROMPT_SEND_URL = "Отправьте URL.";
     public static final String DEAD_LINK = "Отправленная Вами ссылка никуда не ведет. Проверьте и попробуйте добавить снова";
     public static final String INVALID_URL = "Некорректная ссылка. Проверьте формат URL и попробуйте снова.";
@@ -19,8 +19,21 @@ public final class BotMessages {
     public static final String BTN_LINKS_LIST = "Список ссылок";
     public static final String BTN_REFRESH_STATS = "Обновить статистику";
     public static final String BTN_CANCEL = "Отмена";
-    public static final String BTN_BACK = "Вернуться";
+    public static final String BTN_BACK = "\uD83C\uDFE0 Вернуться";
     public static final String BTN_STATS = "📊 Статистика";
+
+    public static final String WELCOME = """
+        <b>VideoStats Bot</b>
+
+        Бот для отслеживания статистики видео по ссылкам.
+
+        <b>Функции:</b>
+        — Добавление ссылок на видео
+        — Просмотр списка отслеживаемых ссылок
+        — Обновление статистики
+        — Просмотр сводной статистики
+        """;
+
 
     private BotMessages() {
     }
