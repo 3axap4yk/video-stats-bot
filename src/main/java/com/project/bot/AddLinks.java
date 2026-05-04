@@ -10,7 +10,7 @@ import com.pengrad.telegrambot.response.SendResponse;
 import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
 import com.project.service.StatisticsService;
-import com.project.service.YouTubeException;
+import com.project.service.VideoException;
 import com.project.utils.Logger;
 
 import java.util.Set;
@@ -115,7 +115,7 @@ public class AddLinks {
             StatisticsService statsService;
             try {
                 statsService = new StatisticsService(normalizedUrl);
-            } catch (YouTubeException e) {
+            } catch (VideoException e) {
                 Logger.error("Ошибка создания StatisticsService: " + e.getMessage());
                 bot.execute(new SendMessage(chatId, YOUTUBE_API_FAILED).replyMarkup(buildCancelKeyboard()));
                 return;
@@ -126,7 +126,7 @@ public class AddLinks {
             try {
                 title = statsService.getTitle();
                 viewCount = statsService.getViewCount();
-            } catch (YouTubeException e) {
+            } catch (VideoException e) {
                 Logger.error("Ошибка получения данных с YouTube: " + e.getMessage());
                 bot.execute(new SendMessage(chatId, YOUTUBE_API_FAILED).replyMarkup(buildCancelKeyboard()));
                 return;

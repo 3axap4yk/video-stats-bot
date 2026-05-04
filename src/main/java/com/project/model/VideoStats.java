@@ -25,6 +25,7 @@ public class VideoStats {
 
     // Геттеры и сеттеры
     public String getVideoUrl() { return videoUrl; }
+    public String getVideoId() { return videoUrl; }  // Алиас для совместимости с batch-клиентами
     public String getPlatform() { return platform; }
     public String getTitle() { return title; }
     public long getViewCount() { return viewCount; }
