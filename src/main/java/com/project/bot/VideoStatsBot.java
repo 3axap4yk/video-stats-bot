@@ -95,12 +95,9 @@ public class VideoStatsBot {
     }
 
     private void sendAccessDenied(Update update, long chatId) {
-        SendMessage request = new SendMessage(chatId, BotMessages.ACCESS_DENIED);
-        bot.execute(request);
-
+        bot.execute(new SendMessage(chatId, BotMessages.ACCESS_DENIED));
         if (update.callbackQuery() != null) {
-            AnswerCallbackQuery answer = new AnswerCallbackQuery(update.callbackQuery().id());
-            bot.execute(answer);
+            bot.execute(new AnswerCallbackQuery(update.callbackQuery().id()));
         }
     }
 
@@ -129,6 +126,19 @@ public class VideoStatsBot {
         Integer messageId = callbackQuery.message() != null ? callbackQuery.message().messageId() : null;
 
         Logger.info("Callback получен: data=" + data + ", chatId=" + chatId);
+
+        // ── Пагинация списка ──────────────────────────────────────────────────
+        if (data.startsWith(ListLinks.PAGE_CALLBACK_PREFIX)) {
+            int page = Integer.parseInt(data.substring(ListLinks.PAGE_CALLBACK_PREFIX.length()));
+            int msgId = messageId != null ? messageId : -1;
+            listLinks.onPageChange(chatId, msgId, page, callbackQueryId);
+            return;
+        }
+        if (data.equals(BotCallbacks.LIST_PAGE_NOOP)) {
+            bot.execute(new AnswerCallbackQuery(callbackQueryId));
+            return;
+        }
+        // ─────────────────────────────────────────────────────────────────────
 
         switch (data) {
             case BotCallbacks.ADD_LINK:
@@ -192,9 +202,7 @@ public class VideoStatsBot {
                 }
         );
 
-        SendMessage request = new SendMessage(chatId, BotMessages.GREETING)
-                .replyMarkup(keyboard);
-        bot.execute(request);
+        bot.execute(new SendMessage(chatId, BotMessages.GREETING).replyMarkup(keyboard));
     }
 
     private Long extractTelegramUserId(Update update) {
