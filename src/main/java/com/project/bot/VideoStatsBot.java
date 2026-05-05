@@ -88,20 +88,21 @@ public class VideoStatsBot {
         Logger.info("Получено обновлений: " + updates.size() + " | " + Thread.currentThread().getName());
 
         for (Update update : updates) {
-            long chatId = resolveChatId(update);
             Long userId = extractTelegramUserId(update);
 
             if (userId == null) {
-                Logger.warn("Доступ запрещён (user id=null), chat id определить не удалось.");
+                Logger.warn("Пропуск обновления без user id");
                 continue;
             }
 
             // Проверка прав доступа пользователя
             if (!userWhitelist.allows(userId)) {
-                Logger.warn("Доступ запрещён для user: " + userId);
-                sendAccessDenied(update, chatId);
+                Logger.warn("Доступ запрещён для user: " + userId + " — сообщение игнорируется");
                 continue;
             }
+
+            long chatId = resolveChatId(update);
+            if (chatId == -1L) continue;
 
             // Маршрутизация: сообщение или callback-запрос
             if (update.message() != null) {
@@ -109,14 +110,6 @@ public class VideoStatsBot {
             } else if (update.callbackQuery() != null) {
                 handleCallbackQuery(update, chatId);
             }
-        }
-    }
-
-    // Отправка сообщения об отказе в доступе
-    private void sendAccessDenied(Update update, long chatId) {
-        bot.execute(new SendMessage(chatId, BotMessages.ACCESS_DENIED));
-        if (update.callbackQuery() != null) {
-            bot.execute(new AnswerCallbackQuery(update.callbackQuery().id()));
         }
     }
 
@@ -227,8 +220,10 @@ public class VideoStatsBot {
         // Расположение кнопок в сетке 2x2
         InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(
                 new InlineKeyboardButton[][]{
-                        {addLinkBtn, linksListBtn},
-                        {refreshStatsBtn, statsBtn}
+                        {addLinkBtn},          // Одна кнопка на ряд
+                        {linksListBtn},
+                        {refreshStatsBtn},
+                        {statsBtn}
                 }
         );
 
