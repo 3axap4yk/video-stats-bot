@@ -220,8 +220,10 @@ public class VideoStatsBot {
         // Расположение кнопок в сетке 2x2
         InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(
                 new InlineKeyboardButton[][]{
-                        {addLinkBtn, linksListBtn},
-                        {refreshStatsBtn, statsBtn}
+                        {addLinkBtn},          // Одна кнопка на ряд → широкая
+                        {linksListBtn},
+                        {refreshStatsBtn},
+                        {statsBtn}
                 }
         );
 
