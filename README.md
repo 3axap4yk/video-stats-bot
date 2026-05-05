@@ -58,7 +58,7 @@
 | [**Тимур Нуржауов**](https://github.com/TimurNurzhau) | Backend (Database) | Проектирование БД, работа с PostgreSQL, JDBC (сохранение и получение данных) |
 | [**Дмитрий Зайцев**](https://github.com/myagenkiy) | Backend (External API) | Интеграция с YouTube/ВК API, парсинг данных, обработка ошибок |
 | [**Иван Лосоногов**](https://github.com/IvanLosonogov) | DevOps | Docker, docker-compose, деплой на сервер, настройка окружения |
-| [**Олег Ландрат**](https://github.com/OlegLandrat1) | ... | ... |
+| [**Олег Ландрат**](https://github.com/OlegLandrat1) | Тестировщик | Тестирование бота, выявление ошибок, траблшутинг |
 
 
 ## 📋 Содержание
