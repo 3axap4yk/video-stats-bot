@@ -12,7 +12,7 @@ public class App {
     private static final Dotenv dotenv = Dotenv.load();
 
     public static String getBotToken() {
-        return dotenv.get("TELEGRAM_BOT_TOKEN");  // ← ИСПРАВЛЕНО
+        return dotenv.get("TELEGRAM_BOT_TOKEN");
     }
 
     public static String getYouTubeApiKey() {
@@ -45,7 +45,10 @@ public class App {
 
         TelegramBot bot = new TelegramBot(botToken);
         UrlResolver urlResolver = new UrlResolver();
-        TelegramUserWhitelist whitelist = TelegramUserWhitelist.fromCommaSeparatedIds(null);
+
+        // читаем whitelist из .env
+        String whitelistCsv = dotenv.get("TELEGRAM_WHITELIST_IDS");
+        TelegramUserWhitelist whitelist = TelegramUserWhitelist.fromCommaSeparatedIds(whitelistCsv);
 
         VideoStatsBot videoStatsBot = new VideoStatsBot(bot, urlResolver, whitelist);
         videoStatsBot.start();
