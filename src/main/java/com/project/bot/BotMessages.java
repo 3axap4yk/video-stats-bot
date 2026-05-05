@@ -1,7 +1,7 @@
 package com.project.bot;
 
 public final class BotMessages {
-    public static final String ACCESS_DENIED = "У вас нет доступа к этому боту.";
+   // public static final String ACCESS_DENIED = "У вас нет доступа к этому боту.";
     public static final String GREETING = "Доступные команды:";
     public static final String PROMPT_SEND_URL = "Отправьте URL.";
     public static final String DEAD_LINK = "Отправленная Вами ссылка никуда не ведет. Проверьте и попробуйте добавить снова";
