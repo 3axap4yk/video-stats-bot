@@ -15,12 +15,12 @@ public final class BotMessages {
     public static final String LINKS_LIST_UNAVAILABLE = "Список ссылок пока недоступен.";
     public static final String REFRESH_STATS_UNAVAILABLE = "Обновление статистики пока недоступно.";
 
-    public static final String BTN_ADD_LINK = "Добавить ссылку";
-    public static final String BTN_LINKS_LIST = "Список ссылок";
-    public static final String BTN_REFRESH_STATS = "Обновить статистику";
-    public static final String BTN_CANCEL = "Отмена";
+    public static final String BTN_ADD_LINK = "\u2795 Добавить ссылку";
+    public static final String BTN_LINKS_LIST = "\uD83D\uDCCB Список ссылок";
+    public static final String BTN_REFRESH_STATS = "\uD83D\uDD04 Обновить статистику";
+    public static final String BTN_CANCEL = "\u274C Отмена";
     public static final String BTN_BACK = "\uD83C\uDFE0 Вернуться";
-    public static final String BTN_STATS = "📊 Статистика";
+    public static final String BTN_STATS = "\uD83D\uDCCA Статистика";
 
     public static final String WELCOME = """
         <b>VideoStats Bot</b>

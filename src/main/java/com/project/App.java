@@ -12,11 +12,15 @@ public class App {
     private static final Dotenv dotenv = Dotenv.load();
 
     public static String getBotToken() {
-        return dotenv.get("TELEGRAM_BOT_TOKEN");  // ← ИСПРАВЛЕНО
+        return dotenv.get("TELEGRAM_BOT_TOKEN");
     }
 
     public static String getYouTubeApiKey() {
         return dotenv.get("YOUTUBE_API_KEY");
+    }
+
+    public static String getTelegramUserWhitelist() {
+        return dotenv.get("TELEGRAM_WHITELIST_IDS");
     }
 
     public static void main(String[] args) {
@@ -24,6 +28,7 @@ public class App {
 
         String botToken = getBotToken();
         String youtubeKey = getYouTubeApiKey();
+        String whitelistCsv = getTelegramUserWhitelist();
 
         if (botToken == null || botToken.isEmpty() || youtubeKey == null || youtubeKey.isEmpty()) {
             Logger.error("Переменные окружения не найдены или пусты");
@@ -45,7 +50,7 @@ public class App {
 
         TelegramBot bot = new TelegramBot(botToken);
         UrlResolver urlResolver = new UrlResolver();
-        TelegramUserWhitelist whitelist = TelegramUserWhitelist.fromCommaSeparatedIds(null);
+        TelegramUserWhitelist whitelist = TelegramUserWhitelist.fromCommaSeparatedIds(whitelistCsv);
 
         VideoStatsBot videoStatsBot = new VideoStatsBot(bot, urlResolver, whitelist);
         videoStatsBot.start();
