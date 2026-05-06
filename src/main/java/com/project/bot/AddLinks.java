@@ -7,6 +7,7 @@ import com.pengrad.telegrambot.request.AnswerCallbackQuery;
 import com.pengrad.telegrambot.request.DeleteMessage;
 import com.pengrad.telegrambot.request.SendMessage;
 import com.pengrad.telegrambot.response.SendResponse;
+import com.project.App;
 import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
 import com.project.service.StatisticsService;
@@ -75,6 +76,14 @@ public class AddLinks {
         showStartDialog.accept(chatId);
     }
 
+    // Возвращает сообщение об ошибке API в зависимости от платформы
+    private String getApiFailedMessage(UrlResolver.Platform platform) {
+        if (platform == UrlResolver.Platform.VK) {
+            return "Не удалось получить данные с VK (API или сеть). Попробуйте ещё раз позже.";
+        }
+        return YOUTUBE_API_FAILED;
+    }
+
     /**
      * Обрабатывает присланную пользователем ссылку.
      * Выполняет валидацию, проверку платформы, получение статистики и сохранение.
@@ -103,10 +112,15 @@ public class AddLinks {
             return;
         }
 
-        // VK не поддерживается для получения статистики
+        // VK через VK API
         if (platform == UrlResolver.Platform.VK) {
-            bot.execute(new SendMessage(chatId, VK_STATS_NOT_SUPPORTED).replyMarkup(buildCancelKeyboard()));
-            return;
+            // Проверяем, есть ли VK API ключ
+            String vkToken = App.getVkApiKey();
+            if (vkToken == null || vkToken.isEmpty()) {
+                bot.execute(new SendMessage(chatId, "VK API не настроен. Добавьте VK_ACCESS_TOKEN в .env файл").replyMarkup(buildCancelKeyboard()));
+                return;
+            }
+            // Продолжаем обработку VK видео
         }
 
         // Отправляем временное сообщение о процессе загрузки
@@ -117,7 +131,7 @@ public class AddLinks {
                 statsService = new StatisticsService(normalizedUrl);
             } catch (VideoException e) {
                 Logger.error("Ошибка создания StatisticsService: " + e.getMessage());
-                bot.execute(new SendMessage(chatId, YOUTUBE_API_FAILED).replyMarkup(buildCancelKeyboard()));
+                bot.execute(new SendMessage(chatId, getApiFailedMessage(platform)).replyMarkup(buildCancelKeyboard()));
                 return;
             }
 
@@ -127,8 +141,8 @@ public class AddLinks {
                 title = statsService.getTitle();
                 viewCount = statsService.getViewCount();
             } catch (VideoException e) {
-                Logger.error("Ошибка получения данных с YouTube: " + e.getMessage());
-                bot.execute(new SendMessage(chatId, YOUTUBE_API_FAILED).replyMarkup(buildCancelKeyboard()));
+                Logger.error("Ошибка получения данных с " + platform + ": " + e.getMessage());
+                bot.execute(new SendMessage(chatId, getApiFailedMessage(platform)).replyMarkup(buildCancelKeyboard()));
                 return;
             }
 
@@ -138,7 +152,7 @@ public class AddLinks {
             // Заполняем объект статистики
             VideoStats stats = new VideoStats();
             stats.setVideoUrl(normalizedUrl);
-            stats.setPlatform("YouTube");
+            stats.setPlatform(platform.toString()); // Используем реальную платформу (YouTube или VK)
             stats.setTitle(title);
             stats.setViewCount(viewCount);
             stats.setHostingUnavailable(false);

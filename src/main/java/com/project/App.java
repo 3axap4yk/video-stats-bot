@@ -19,6 +19,9 @@ public class App {
         return dotenv.get("YOUTUBE_API_KEY");
     }
 
+    public static String getVkApiKey() {
+        return dotenv.get("VK_ACCESS_TOKEN");
+    }
     public static String getTelegramUserWhitelist() {
         return dotenv.get("TELEGRAM_WHITELIST_IDS");
     }
