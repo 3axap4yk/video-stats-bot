@@ -63,23 +63,4 @@ public class DbConnection {
             return false;
         }
     }
-
-    public static void closePool() {
-        if (dataSource != null && !dataSource.isClosed()) {
-            dataSource.close();
-            Logger.info("Пул соединений с БД закрыт");
-        }
-    }
-
-    public static String getDbUrl() {
-        return dataSource != null ? dataSource.getJdbcUrl() : null;
-    }
-
-    public static String getDbUser() {
-        return dataSource != null ? dataSource.getUsername() : null;
-    }
-
-    public static String getDbPassword() {
-        return dataSource != null ? dataSource.getPassword() : null;
-    }
 }
