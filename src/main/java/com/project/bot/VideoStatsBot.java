@@ -15,19 +15,31 @@ import com.pengrad.telegrambot.response.BaseResponse;
 import com.project.utils.Logger;
 
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class VideoStatsBot {
+    // Основной экземпляр Telegram бота
     private final TelegramBot bot;
+    // Белый список пользователей
     private final TelegramUserWhitelist userWhitelist;
+    // Обработчик добавления ссылок
     private final AddLinks addLinks;
+    // Обработчик обновления статистики
     private final RefreshStatsLinks refreshStatsLinks;
+    // Обработчик списка ссылок
     private final ListLinks listLinks;
+    // Обработчик статистики
     private final StatsHandler statsHandler;
+    // Пул потоков для асинхронных задач
     private final ExecutorService executorService;
+    // Множество ID чатов, которые уже получили приветствие
+    private final Set<Long> greetedChats = ConcurrentHashMap.newKeySet();
 
+    // Конструктор бота
     public VideoStatsBot(TelegramBot bot, UrlResolver urlResolver, TelegramUserWhitelist userWhitelist) {
         this.bot = bot;
         this.userWhitelist = userWhitelist;
@@ -38,6 +50,7 @@ public class VideoStatsBot {
         this.executorService = Executors.newFixedThreadPool(5);
     }
 
+    // Запуск бота с long polling режимом
     public void start() {
         Logger.info("Удаляем webhook и запускаем long polling...");
         BaseResponse response = bot.execute(new DeleteWebhook());
@@ -45,6 +58,7 @@ public class VideoStatsBot {
             Logger.warn("Ошибка удаления webhook: " + response.description());
         }
 
+        // Установка обработчика обновлений
         bot.setUpdatesListener(updates -> {
             processUpdates(updates);
             return UpdatesListener.CONFIRMED_UPDATES_ALL;
@@ -53,6 +67,7 @@ public class VideoStatsBot {
         Logger.info("Бот запущен и слушает сообщения...");
         Logger.info("Нажмите Ctrl+C для остановки");
 
+        // Хук для корректного завершения работы
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             Logger.info("Завершение работы бота...");
             executorService.shutdown();
@@ -68,24 +83,28 @@ public class VideoStatsBot {
         }));
     }
 
+    // Обработка списка полученных обновлений
     private void processUpdates(List<Update> updates) {
         Logger.info("Получено обновлений: " + updates.size() + " | " + Thread.currentThread().getName());
 
         for (Update update : updates) {
-            long chatId = resolveChatId(update);
             Long userId = extractTelegramUserId(update);
 
             if (userId == null) {
-                Logger.warn("Доступ запрещён (user id=null), chat id определить не удалось.");
+                Logger.warn("Пропуск обновления без user id");
                 continue;
             }
 
+            // Проверка прав доступа пользователя
             if (!userWhitelist.allows(userId)) {
-                Logger.warn("Доступ запрещён для user: " + userId);
-                sendAccessDenied(update, chatId);
+                Logger.warn("Доступ запрещён для user: " + userId + " — сообщение игнорируется");
                 continue;
             }
 
+            long chatId = resolveChatId(update);
+            if (chatId == -1L) continue;
+
+            // Маршрутизация: сообщение или callback-запрос
             if (update.message() != null) {
                 handleMessage(update, chatId);
             } else if (update.callbackQuery() != null) {
@@ -94,13 +113,7 @@ public class VideoStatsBot {
         }
     }
 
-    private void sendAccessDenied(Update update, long chatId) {
-        bot.execute(new SendMessage(chatId, BotMessages.ACCESS_DENIED));
-        if (update.callbackQuery() != null) {
-            bot.execute(new AnswerCallbackQuery(update.callbackQuery().id()));
-        }
-    }
-
+    // Обработка текстовых сообщений
     private void handleMessage(Update update, long chatId) {
         Message message = update.message();
         String text = message.text();
@@ -110,15 +123,20 @@ public class VideoStatsBot {
         if (text.equals("/start")) {
             Logger.info("Команда /start от чата: " + chatId);
             addLinks.resetChat(chatId);
+            if (greetedChats.add(chatId)) {
+                bot.execute(new SendMessage(chatId, BotMessages.WELCOME).parseMode(ParseMode.HTML));
+            }
             sendStartDialog(chatId);
         } else if (text.startsWith("/")) {
             return;
         } else if (addLinks.isAwaitingUrl(chatId)) {
+            // Обработка введённой URL-ссылки
             Logger.info("Получена ссылка от чата: " + chatId + " -> " + text);
             addLinks.onSubmittedUrl(chatId, text.trim());
         }
     }
 
+    // Обработка callback-запросов от инлайн-кнопок
     private void handleCallbackQuery(Update update, long chatId) {
         CallbackQuery callbackQuery = update.callbackQuery();
         String data = callbackQuery.data();
@@ -127,19 +145,20 @@ public class VideoStatsBot {
 
         Logger.info("Callback получен: data=" + data + ", chatId=" + chatId);
 
-        // ── Пагинация списка ──────────────────────────────────────────────────
+        // Обработка пагинации списка ссылок
         if (data.startsWith(ListLinks.PAGE_CALLBACK_PREFIX)) {
             int page = Integer.parseInt(data.substring(ListLinks.PAGE_CALLBACK_PREFIX.length()));
             int msgId = messageId != null ? messageId : -1;
             listLinks.onPageChange(chatId, msgId, page, callbackQueryId);
             return;
         }
+        // NOOP - пустая операция для кнопок без действия
         if (data.equals(BotCallbacks.LIST_PAGE_NOOP)) {
             bot.execute(new AnswerCallbackQuery(callbackQueryId));
             return;
         }
-        // ─────────────────────────────────────────────────────────────────────
 
+        // Обработка основных команд по callback data
         switch (data) {
             case BotCallbacks.ADD_LINK:
                 Logger.info("Обработка ADD_LINK");
@@ -172,6 +191,7 @@ public class VideoStatsBot {
         }
     }
 
+    // Отображение статистики бота
     private void showStats(long chatId, String callbackQueryId) {
         bot.execute(new AnswerCallbackQuery(callbackQueryId));
         String stats = statsHandler.getStats();
@@ -183,9 +203,11 @@ public class VideoStatsBot {
                 .replyMarkup(keyboard));
     }
 
+    // Отправка стартового меню с кнопками
     private void sendStartDialog(long chatId) {
         Logger.info("Отправляем стартовое меню в чат: " + chatId);
 
+        // Создание кнопок главного меню
         InlineKeyboardButton addLinkBtn = new InlineKeyboardButton(BotMessages.BTN_ADD_LINK)
                 .callbackData(BotCallbacks.ADD_LINK);
         InlineKeyboardButton linksListBtn = new InlineKeyboardButton(BotMessages.BTN_LINKS_LIST)
@@ -195,16 +217,20 @@ public class VideoStatsBot {
         InlineKeyboardButton statsBtn = new InlineKeyboardButton(BotMessages.BTN_STATS)
                 .callbackData(BotCallbacks.STATS);
 
+        // Расположение кнопок в сетке 2x2
         InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(
                 new InlineKeyboardButton[][]{
-                        {addLinkBtn, linksListBtn},
-                        {refreshStatsBtn, statsBtn}
+                        {addLinkBtn},          // Одна кнопка на ряд
+                        {linksListBtn},
+                        {refreshStatsBtn},
+                        {statsBtn}
                 }
         );
 
         bot.execute(new SendMessage(chatId, BotMessages.GREETING).replyMarkup(keyboard));
     }
 
+    // Извлечение Telegram user ID из обновления
     private Long extractTelegramUserId(Update update) {
         if (update.message() != null && update.message().from() != null) {
             return update.message().from().id();
@@ -215,6 +241,7 @@ public class VideoStatsBot {
         return null;
     }
 
+    // Определение chat ID из обновления
     private long resolveChatId(Update update) {
         if (update.message() != null) {
             return update.message().chat().id();

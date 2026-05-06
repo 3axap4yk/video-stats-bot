@@ -88,7 +88,7 @@ public class YouTubeClient {
     }
 
     /**
-     * НОВЫЙ МЕТОД: Обновляет title и viewCount для пачки VideoStats одним запросом к YouTube API
+     * Обновляет title и viewCount для пачки VideoStats одним запросом к YouTube API
      *
      * @param videoStatsList список видео для обновления
      * @return количество успешно обновленных видео
@@ -178,6 +178,12 @@ public class YouTubeClient {
 
                     videoStats.setLastUpdated(LocalDateTime.now());
                     videoStats.setHostingUnavailable(false);
+
+                    // ✅ НОВОЕ: заполняем platformVideoId (ID для API)
+                    if (videoStats.getPlatformVideoId() == null || videoStats.getPlatformVideoId().isEmpty()) {
+                        videoStats.setPlatformVideoId(videoStats.getVideoId());
+                    }
+
                     updatedCount++;
 
                     // Кэшируем каждый полученный ответ

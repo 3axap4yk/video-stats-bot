@@ -11,11 +11,19 @@ echo "Проверяем зависимости..."
 command -v docker >/dev/null 2>&1 || { echo "❌ Docker не установлен"; exit 1; }
 command -v docker compose >/dev/null 2>&1 || { echo "❌ Docker Compose не установлен"; exit 1; }
 
+echo "Проверяем доступность Telegram API..."
+if curl -Is --max-time 5 "https://api.telegram.org" > /dev/null 2>&1; then
+    echo "✅ Telegram API доступен"
+else
+    echo "❌ ОШИБКА: Telegram API недоступен или соединение разорвано"
+    exit 1
+fi
+
 echo "Очищаем старое окружение..."
 docker compose down --remove-orphans
 
 echo "Собираем проект..."
-chmod +x gradlew || true
+chmod +x ./gradlew || true
 ./gradlew clean build
 
 echo "Запускаем контейнеры..."
@@ -24,8 +32,21 @@ docker compose up -d --build
 echo "Ждём запуск бота..."
 sleep 5
 
-echo "Логи:"
-docker compose logs --tail=50
+echo "Проверяем статус базы данных..."
+RETRIES=10
+until docker exec video_stats_db pg_isready -U "${DB_USER:-postgres}" > /dev/null 2>&1; do
+    RETRIES=$((RETRIES - 1))
+    if [ "$RETRIES" -le 0 ]; then
+        echo "❌ База данных не запустилась за отведённое время"
+        exit 1
+    fi
+    echo "⏳ Ожидание базы данных... ($RETRIES)"
+    sleep 1
+done
+echo "✅ База данных готова к работе"
+
+echo "Логи бота:"
+docker compose logs backend --tail=30
 
 echo ""
-echo "Бот успешно запущен!"
+echo "✅ Бот успешно запущен!"

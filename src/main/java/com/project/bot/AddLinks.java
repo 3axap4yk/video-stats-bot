@@ -7,10 +7,11 @@ import com.pengrad.telegrambot.request.AnswerCallbackQuery;
 import com.pengrad.telegrambot.request.DeleteMessage;
 import com.pengrad.telegrambot.request.SendMessage;
 import com.pengrad.telegrambot.response.SendResponse;
+import com.project.App;
 import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
 import com.project.service.StatisticsService;
-import com.project.service.YouTubeException;
+import com.project.service.VideoException;
 import com.project.utils.Logger;
 
 import java.util.Set;
@@ -75,6 +76,14 @@ public class AddLinks {
         showStartDialog.accept(chatId);
     }
 
+    // Возвращает сообщение об ошибке API в зависимости от платформы
+    private String getApiFailedMessage(UrlResolver.Platform platform) {
+        if (platform == UrlResolver.Platform.VK) {
+            return "Не удалось получить данные с VK (API или сеть). Попробуйте ещё раз позже.";
+        }
+        return YOUTUBE_API_FAILED;
+    }
+
     /**
      * Обрабатывает присланную пользователем ссылку.
      * Выполняет валидацию, проверку платформы, получение статистики и сохранение.
@@ -97,16 +106,16 @@ public class AddLinks {
             return;
         }
 
-        // Проверка существования видео/ресурса по ссылке
-        if (!urlResolver.pointsToExistingVideo(normalizedUrl)) {
+        // Проверка существования видео/ресурса по ссылке (для VK пропускаем, так как API сам проверит)
+        if (platform != UrlResolver.Platform.VK && !urlResolver.pointsToExistingVideo(normalizedUrl)) {
             bot.execute(new SendMessage(chatId, DEAD_LINK).replyMarkup(buildCancelKeyboard()));
             return;
         }
 
-        // VK не поддерживается для получения статистики
+        // VK обработка
         if (platform == UrlResolver.Platform.VK) {
-            bot.execute(new SendMessage(chatId, VK_STATS_NOT_SUPPORTED).replyMarkup(buildCancelKeyboard()));
-            return;
+            Logger.info("Обработка VK видео: " + normalizedUrl);
+            // Продолжаем обработку VK видео
         }
 
         // Отправляем временное сообщение о процессе загрузки
@@ -115,9 +124,9 @@ public class AddLinks {
             StatisticsService statsService;
             try {
                 statsService = new StatisticsService(normalizedUrl);
-            } catch (YouTubeException e) {
+            } catch (VideoException e) {
                 Logger.error("Ошибка создания StatisticsService: " + e.getMessage());
-                bot.execute(new SendMessage(chatId, YOUTUBE_API_FAILED).replyMarkup(buildCancelKeyboard()));
+                bot.execute(new SendMessage(chatId, getApiFailedMessage(platform)).replyMarkup(buildCancelKeyboard()));
                 return;
             }
 
@@ -126,9 +135,9 @@ public class AddLinks {
             try {
                 title = statsService.getTitle();
                 viewCount = statsService.getViewCount();
-            } catch (YouTubeException e) {
-                Logger.error("Ошибка получения данных с YouTube: " + e.getMessage());
-                bot.execute(new SendMessage(chatId, YOUTUBE_API_FAILED).replyMarkup(buildCancelKeyboard()));
+            } catch (VideoException e) {
+                Logger.error("Ошибка получения данных с " + platform + ": " + e.getMessage());
+                bot.execute(new SendMessage(chatId, getApiFailedMessage(platform)).replyMarkup(buildCancelKeyboard()));
                 return;
             }
 
@@ -138,10 +147,31 @@ public class AddLinks {
             // Заполняем объект статистики
             VideoStats stats = new VideoStats();
             stats.setVideoUrl(normalizedUrl);
-            stats.setPlatform("YouTube");
+            stats.setPlatform(platform.toString());
             stats.setTitle(title);
             stats.setViewCount(viewCount);
             stats.setHostingUnavailable(false);
+
+            // Сохраняем ID платформы в соответствующую таблицу
+            if (platform == UrlResolver.Platform.YOUTUBE) {
+                String youtubeId = urlResolver.extractYouTubeIdFromUrl(normalizedUrl);
+                if (youtubeId != null && !youtubeId.isEmpty()) {
+                    stats.setPlatformVideoId(youtubeId);
+                    videoRepository.saveYouTubeId(normalizedUrl, youtubeId);
+                    Logger.info("Сохранён YouTube ID: " + youtubeId);
+                } else {
+                    Logger.warn("Не удалось извлечь YouTube ID из URL: " + normalizedUrl);
+                }
+            } else if (platform == UrlResolver.Platform.VK) {
+                String vkId = urlResolver.extractVkIdFromUrl(normalizedUrl);
+                if (vkId != null && !vkId.isEmpty()) {
+                    stats.setPlatformVideoId(vkId);
+                    videoRepository.saveVkId(normalizedUrl, vkId, null);
+                    Logger.info("Сохранён VK ID: " + vkId);
+                } else {
+                    Logger.warn("Не удалось извлечь VK ID из URL: " + normalizedUrl);
+                }
+            }
 
             // Клавиатура с кнопкой "Назад"
             InlineKeyboardButton backBtn = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);

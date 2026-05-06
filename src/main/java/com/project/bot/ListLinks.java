@@ -123,7 +123,7 @@ public class ListLinks {
                     .append("   📊 Просмотров: ").append(views);
 
             if (v.isHostingUnavailable()) {
-                sb.append(" ⚠️ Платформа недоступна");
+                sb.append(" ⚠️ Видео недоступно");
             }
             if (v.getLastUpdated() != null) {
                 sb.append("\n   🕐 Обновлено: ")

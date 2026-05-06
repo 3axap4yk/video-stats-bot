@@ -200,6 +200,12 @@ public class VKVideoClient {
 
                     videoStats.setLastUpdated(LocalDateTime.now());
                     videoStats.setHostingUnavailable(false);
+
+                    // ✅ НОВОЕ: заполняем platformVideoId (ID для API)
+                    if (videoStats.getPlatformVideoId() == null || videoStats.getPlatformVideoId().isEmpty()) {
+                        videoStats.setPlatformVideoId(videoStats.getVideoId());
+                    }
+
                     updatedCount++;
 
                     // Кэшируем каждый полученный ответ
