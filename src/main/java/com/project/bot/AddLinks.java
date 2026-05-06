@@ -107,6 +107,7 @@ public class AddLinks {
         }
 
         // Проверка существования видео/ресурса по ссылке (для VK пропускаем, так как API сам проверит)
+        Logger.info("Платформа перед проверкой существования: " + platform);
         if (platform != UrlResolver.Platform.VK && !urlResolver.pointsToExistingVideo(normalizedUrl)) {
             bot.execute(new SendMessage(chatId, DEAD_LINK).replyMarkup(buildCancelKeyboard()));
             return;
