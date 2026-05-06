@@ -85,7 +85,7 @@ echo "Ожидаем запуск бота..."
 sleep 5
 
 echo "Логи бота:"
-docker logs video_stats_bot --tail 30
+docker logs video_stats_bot --tail 30 | grep -v "Ctrl+C для остановки"
 
 echo ""
 echo "✅ Обновление завершено!"
