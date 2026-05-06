@@ -81,7 +81,7 @@ done
 echo "✅ База данных готова к работе"
 
 echo "Логи бота:"
-docker compose logs video_stats_bot --tail=30
+docker logs video_stats_bot --tail 30
 
 echo ""
 echo "✅ Обновление завершено!"
