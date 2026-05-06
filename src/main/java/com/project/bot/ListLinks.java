@@ -11,8 +11,8 @@ import com.pengrad.telegrambot.response.BaseResponse;
 import com.pengrad.telegrambot.response.SendResponse;
 import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
+import com.project.utils.FormatUtils;
 import com.project.utils.Logger;
-import com.project.utils.ViewFormatter;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -113,8 +113,8 @@ public class ListLinks {
                 prevPlatform = v.getPlatform();
             }
 
-            String title = ViewFormatter.escapeHtml(v.getTitle());
-            String views = ViewFormatter.formatViews(v.getViewCount());
+            String title = FormatUtils.escapeHtml(v.getTitle());
+            String views = FormatUtils.formatViews(v.getViewCount());
             String platformLabel = getPlatformLabel(v.getPlatform());
 
             sb.append(i + 1).append(". <b>").append(title).append("</b>\n")
@@ -137,7 +137,7 @@ public class ListLinks {
             long totalViews = videos.stream().mapToLong(VideoStats::getViewCount).sum();
             sb.append("━━━━━━━━━━━━━━━━━━\n")
                     .append("📊 <b>Итого:</b> ").append(videos.size()).append(" видео · ")
-                    .append(ViewFormatter.formatViews(totalViews)).append(" просмотров");
+                    .append(FormatUtils.formatViews(totalViews)).append(" просмотров");
         }
 
         return sb.toString();
