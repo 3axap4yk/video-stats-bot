@@ -107,13 +107,12 @@ public class AddLinks {
         }
 
         // Проверка существования видео/ресурса по ссылке (для VK пропускаем, так как API сам проверит)
-        Logger.info("Платформа перед проверкой существования: " + platform);
         if (platform != UrlResolver.Platform.VK && !urlResolver.pointsToExistingVideo(normalizedUrl)) {
             bot.execute(new SendMessage(chatId, DEAD_LINK).replyMarkup(buildCancelKeyboard()));
             return;
         }
 
-// VK через VK API
+        // VK обработка
         if (platform == UrlResolver.Platform.VK) {
             Logger.info("Обработка VK видео: " + normalizedUrl);
             // Продолжаем обработку VK видео
@@ -148,10 +147,31 @@ public class AddLinks {
             // Заполняем объект статистики
             VideoStats stats = new VideoStats();
             stats.setVideoUrl(normalizedUrl);
-            stats.setPlatform(platform.toString()); // Используем реальную платформу (YouTube или VK)
+            stats.setPlatform(platform.toString());
             stats.setTitle(title);
             stats.setViewCount(viewCount);
             stats.setHostingUnavailable(false);
+
+            // Сохраняем ID платформы в соответствующую таблицу
+            if (platform == UrlResolver.Platform.YOUTUBE) {
+                String youtubeId = urlResolver.extractYouTubeIdFromUrl(normalizedUrl);
+                if (youtubeId != null && !youtubeId.isEmpty()) {
+                    stats.setPlatformVideoId(youtubeId);
+                    videoRepository.saveYouTubeId(normalizedUrl, youtubeId);
+                    Logger.info("Сохранён YouTube ID: " + youtubeId);
+                } else {
+                    Logger.warn("Не удалось извлечь YouTube ID из URL: " + normalizedUrl);
+                }
+            } else if (platform == UrlResolver.Platform.VK) {
+                String vkId = urlResolver.extractVkIdFromUrl(normalizedUrl);
+                if (vkId != null && !vkId.isEmpty()) {
+                    stats.setPlatformVideoId(vkId);
+                    videoRepository.saveVkId(normalizedUrl, vkId, null);
+                    Logger.info("Сохранён VK ID: " + vkId);
+                } else {
+                    Logger.warn("Не удалось извлечь VK ID из URL: " + normalizedUrl);
+                }
+            }
 
             // Клавиатура с кнопкой "Назад"
             InlineKeyboardButton backBtn = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);

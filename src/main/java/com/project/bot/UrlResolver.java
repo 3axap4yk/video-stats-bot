@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 // Разбор пользовательских URL, определение платформы и базовая проверка доступности видео.
 public class UrlResolver {
@@ -80,6 +81,38 @@ public class UrlResolver {
 
         Logger.warn("resolvePlatform: неизвестный хост = " + normalizedHost);
         return Platform.UNKNOWN;
+    }
+
+    // Извлекает YouTube ID из URL
+    public String extractYouTubeIdFromUrl(String url) {
+        if (url == null) return null;
+
+        if (url.contains("youtu.be/")) {
+            String id = url.substring(url.lastIndexOf("/") + 1);
+            if (id.contains("?")) {
+                id = id.split("\\?")[0];
+            }
+            return id;
+        } else if (url.contains("v=")) {
+            String id = url.split("v=")[1];
+            if (id.contains("&")) {
+                id = id.split("&")[0];
+            }
+            return id;
+        }
+        return null;
+    }
+
+    // Извлекает VK ID из URL (формат: ownerId_videoId)
+    public String extractVkIdFromUrl(String url) {
+        if (url == null) return null;
+
+        Pattern pattern = Pattern.compile("video[-_](\\d+_\\d+)");
+        Matcher matcher = pattern.matcher(url);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
     }
 
     // Безопасно извлекает host в нижнем регистре.
