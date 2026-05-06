@@ -97,6 +97,12 @@ public class RefreshStatsLinks {
                 // Сохраняем обновленные видео в БД
                 for (VideoStats video : youtubeVideos) {
                     videoRepository.save(video);
+
+                    // ✅ НОВОЕ: обновляем YouTube ID в таблице youtube
+                    if (video.getPlatformVideoId() != null && !video.getPlatformVideoId().isEmpty()) {
+                        videoRepository.saveYouTubeId(video.getVideoUrl(), video.getPlatformVideoId());
+                        Logger.info("Обновлён YouTube ID для: " + video.getVideoUrl() + " -> " + video.getPlatformVideoId());
+                    }
                 }
                 Logger.success("YouTube batch обновлён: " + youtubeUpdated + "/" + youtubeVideos.size());
             } catch (YouTubeException e) {
@@ -120,6 +126,12 @@ public class RefreshStatsLinks {
                 // Сохраняем обновленные видео в БД
                 for (VideoStats video : vkVideos) {
                     videoRepository.save(video);
+
+                    // ✅ НОВОЕ: обновляем VK ID в таблице vk
+                    if (video.getPlatformVideoId() != null && !video.getPlatformVideoId().isEmpty()) {
+                        videoRepository.saveVkId(video.getVideoUrl(), video.getPlatformVideoId(), null);
+                        Logger.info("Обновлён VK ID для: " + video.getVideoUrl() + " -> " + video.getPlatformVideoId());
+                    }
                 }
                 Logger.success("VK batch обновлён: " + vkUpdated + "/" + vkVideos.size());
             } catch (VKVideoException e) {
