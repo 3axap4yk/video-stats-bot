@@ -58,7 +58,7 @@
 | [**Тимур Нуржауов**](https://github.com/TimurNurzhau) | Backend (Database) | Проектирование БД, работа с PostgreSQL, JDBC (сохранение и получение данных) |
 | [**Дмитрий Зайцев**](https://github.com/myagenkiy) | Backend (External API) | Интеграция с YouTube/ВК API, парсинг данных, обработка ошибок |
 | [**Иван Лосоногов**](https://github.com/IvanLosonogov) | DevOps | Docker, docker-compose, деплой на сервер, настройка окружения |
-| [**Олег Ландрат**](https://github.com/OlegLandrat1) | ... | ... |
+| [**Олег Ландрат**](https://github.com/OlegLandrat1) | Тестировщик | Тестирование бота, выявление ошибок, траблшутинг |
 
 
 ## 📋 Содержание
@@ -103,7 +103,7 @@
 | **Язык бэкенда** | Java 17 |
 | **База данных** | PostgreSQL 17 (Alpine) |
 | **Интерфейс** | Telegram Bot API |
-| **Внешние API** | YouTube Data API v3 |
+| **Внешние API** | YouTube Data API v3 + VK Data API v5|
 | **Контейнеризация** | Docker + Docker Compose |
 | **Сборщик** | Gradle |
 
@@ -113,18 +113,28 @@
 
 ### Сервер
 - Linux (Ubuntu 20.04+ рекомендуется);
+- RAM - 1 Гб / SSD 20 Гб;
 - Docker Engine 20.10+;
 - Docker Compose 1.29+;
 - Доступ к Telegram API.
 
 ### Учётные записи и ключи
 - **Telegram Bot Token** — получить у [@BotFather](https://t.me/BotFather);
-- **YouTube Data API Key** — получить в [Google Cloud Console](https://console.cloud.google.com/apis/credentials), квота составляет 10 000 запросов в сутки;
+- **Telegram ID пользователя** - посмотреть у себя в телеграм-аккаунте (доступ будет только у пользователей вписаных в `.env`)
+- **YouTube Data API Key** — получить в [Google Cloud Console](https://console.cloud.google.com/apis/credentials), квота составляет `10 000` запросов в сутки;
+- **VK Data API Key** - получить в ИНФА
 - **PostgreSQL** (опционально, если не используете Docker-образ) — база данных.
 
 #### Как получить Telegram Bot Token
 - Перейдите в [@BotFather](https://t.me/BotFather);
 - Теперь нужно ввести команду `/newbot` и отвечать на сообщения BotFather. Он предложит ввести `name` и `username` бота, а затем выдаст токен, который нужно сохранить.
+
+#### Как узнать Telegram ID пользователя
+- Откройте настройки Telegram;
+- Перейдите в "Продвинутые настройки";
+- Перейдите в "Экспериментальные настройки";
+- Включите "Show Peer IDs in Profile";
+- Теперь, если открыть профиль любого пользователя, вы сможете увидеть его ID.
 
 #### Как получить YouTube Api Key
 - Перейдите на [Google Cloud Console](https://console.cloud.google.com/apis/credentials);
@@ -135,19 +145,21 @@
 - Создайте API ключ; 
 - Сохраните его для дальнейшего использования.
 
+#### Как получить VK API Key
+- ИНФА
+- ИНФА
+
 ## 🚀 Быстрый старт (Self-Hosted)
 
 Следуйте этой инструкции, чтобы развернуть сервис на вашем сервере:
 
 ### Шаг 1: Клонировать репозиторий
-
 ```bash
 git clone https://github.com/3axap4yk/video-stats-bot.git
 cd video-stats-bot
 ```
 
 ### Шаг 2: Настроить переменные окружения
-
 Создайте файл `.env` из шаблона и заполните его реальными значениями:
 ```bash
 cp .env.example .env
@@ -156,12 +168,14 @@ nano .env
 Подробное описание всех переменных — в разделе [«Конфигурация (.env)»](#️-конфигурация-env).
 
 ### Шаг 3: Запустить сервис
-
 ```bash
 ./run
 ```
 Скрипт `run` автоматически:
+- проверяет доступ к Telegram-API;
+- проверяет установку необходимых программ;
 - собирает проект через Gradle;
+- удаляет старые контейнеры (если они уже существуют);
 - пересобирает Docker-образы;
 - поднимает PostgreSQL и backend через docker-compose;
 - выводит логи бота.
@@ -182,28 +196,39 @@ docker-compose logs -f
 
 ## ⚙️ Конфигурация (.env)
 
-Все настройки проекта находятся в файле `.env`. Ниже перечислены все переменные, которые необходимо заполнить.
+Все настройки проекта находятся в файле `.env`. Ниже перечислены все переменные, которые необходимо заполнить:
 
-### База данных
-
-```
-DB_HOST=db
-DB_PORT=5432
-DB_NAME=your_DB-name_here
-DB_USER=your_username_here
-DB_PASSWORD=your_password_here
-```
-### YouTube API
-
-```
-YOUTUBE_API_KEY=your_youtube_api_key_here
-```
 ### Telegram Bot
 ```
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 ```
-> Внимание: Файл .env содержит секретные данные. Никогда не добавляйте его в репозиторий — он уже находится в .gitignore.
+### Whitelist
+```
+# Если несколько ID, то записывайте через запятую без пробелов
+TELEGRAM_WHITELIST_IDS=your_telegram_id_here1,your_telegram_id_here2
+```
+> Внимание: Если вы оставите `TELEGRAM_WHITELIST_IDS` пустым, то доступ к боту будет у всех пользователей!
 
+### YouTube API
+```
+YOUTUBE_API_KEY=your_youtube_api_key_here
+```
+
+### VK API
+```
+VK_ACCESS_TOKEN=your_vk_access_token_here
+VK_API_VERSION=5.131
+```
+
+### База данных
+```
+DB_HOST=db
+DB_PORT=5432
+DB_NAME=your_db_name_here
+DB_USER=your_username_here
+DB_PASSWORD=your_password_here
+```
+> Внимание: Файл `.env` содержит секретные данные. Никогда не добавляйте его в репозиторий — он уже находится в .gitignore.
 
 ## 📂 Структура проекта
 
@@ -212,9 +237,8 @@ TELEGRAM_BOT_TOKEN=your_bot_token_here
 Приложение построено по слоистой архитектуре:
 
 - **Bot Layer** — обработка Telegram команд
-- **Service Layer** — бизнес-логика
+- **Service Layer** — обработка логики и работа с внешними API
 - **Repository Layer** — работа с базой данных
-- **Integration Layer** — взаимодействие с внешними API
 
 ### Модули
 ```
