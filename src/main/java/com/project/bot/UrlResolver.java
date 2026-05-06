@@ -1,5 +1,6 @@
 package com.project.bot;
 
+import com.project.utils.Logger;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
@@ -48,18 +49,24 @@ public class UrlResolver {
     public Platform resolvePlatform(String rawUrl) {
         Optional<String> host = extractHost(rawUrl);
         if (host.isEmpty()) {
+            Logger.warn("resolvePlatform: host не найден для: " + rawUrl);
             return Platform.UNKNOWN;
         }
 
         String normalizedHost = host.get();
+        Logger.info("resolvePlatform: хост = " + normalizedHost);
+
         if (isYouTubeHost(normalizedHost)) {
+            Logger.info("resolvePlatform: определён YouTube");
             return Platform.YOUTUBE;
         }
 
         if (isVkHost(normalizedHost)) {
+            Logger.info("resolvePlatform: определён VK");
             return Platform.VK;
         }
 
+        Logger.warn("resolvePlatform: неизвестный хост = " + normalizedHost);
         return Platform.UNKNOWN;
     }
 
