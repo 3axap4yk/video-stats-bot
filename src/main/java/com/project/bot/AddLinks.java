@@ -112,14 +112,9 @@ public class AddLinks {
             return;
         }
 
-        // VK через VK API
+// VK через VK API
         if (platform == UrlResolver.Platform.VK) {
-            // Проверяем, есть ли VK API ключ
-            String vkToken = App.getVkApiKey();
-            if (vkToken == null || vkToken.isEmpty()) {
-                bot.execute(new SendMessage(chatId, "VK API не настроен. Добавьте VK_ACCESS_TOKEN в .env файл").replyMarkup(buildCancelKeyboard()));
-                return;
-            }
+            Logger.info("Обработка VK видео: " + normalizedUrl);
             // Продолжаем обработку VK видео
         }
 
