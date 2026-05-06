@@ -49,6 +49,7 @@ public class VideoRepository {
             ResultSet rs = pstmt.executeQuery();
             if (rs.next()) {
                 int id = rs.getInt("id");
+                stats.setId((long) id);  // ← ДОБАВИТЬ: заполняем ID в объекте
                 Logger.info("Сохранено в БД: " + stats.getVideoUrl() + " (id=" + id + ")");
                 saveToHistory(id, stats.getViewCount());
             }
@@ -87,7 +88,14 @@ public class VideoRepository {
     }
 
     public VideoStats findById(int id) {
-        String sql = "SELECT * FROM videos WHERE id = ?";
+        String sql = """
+            SELECT v.*, 
+                   COALESCE(y.id_youtube, vk.id_vk) as platform_video_id
+            FROM videos v
+            LEFT JOIN youtube y ON v.link = y.video_link
+            LEFT JOIN vk ON v.link = vk.video_link
+            WHERE v.id = ?
+        """;
 
         try (Connection conn = DbConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -96,7 +104,9 @@ public class VideoRepository {
             ResultSet rs = pstmt.executeQuery();
 
             if (rs.next()) {
-                return mapResultSetToVideoStats(rs);
+                VideoStats stats = mapResultSetToVideoStats(rs);
+                stats.setPlatformVideoId(rs.getString("platform_video_id"));
+                return stats;
             }
 
         } catch (SQLException e) {
@@ -110,7 +120,14 @@ public class VideoRepository {
             return null;
         }
 
-        String sql = "SELECT * FROM videos WHERE link = ?";
+        String sql = """
+            SELECT v.*, 
+                   COALESCE(y.id_youtube, vk.id_vk) as platform_video_id
+            FROM videos v
+            LEFT JOIN youtube y ON v.link = y.video_link
+            LEFT JOIN vk ON v.link = vk.video_link
+            WHERE v.link = ?
+        """;
 
         try (Connection conn = DbConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -119,7 +136,9 @@ public class VideoRepository {
             ResultSet rs = pstmt.executeQuery();
 
             if (rs.next()) {
-                return mapResultSetToVideoStats(rs);
+                VideoStats stats = mapResultSetToVideoStats(rs);
+                stats.setPlatformVideoId(rs.getString("platform_video_id"));
+                return stats;
             }
 
         } catch (SQLException e) {
@@ -130,14 +149,23 @@ public class VideoRepository {
 
     public List<VideoStats> findAll() {
         List<VideoStats> list = new ArrayList<>();
-        String sql = "SELECT * FROM videos ORDER BY id DESC";
+        String sql = """
+            SELECT v.*, 
+                   COALESCE(y.id_youtube, vk.id_vk) as platform_video_id
+            FROM videos v
+            LEFT JOIN youtube y ON v.link = y.video_link
+            LEFT JOIN vk ON v.link = vk.video_link
+            ORDER BY v.id DESC
+        """;
 
         try (Connection conn = DbConnection.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
 
             while (rs.next()) {
-                list.add(mapResultSetToVideoStats(rs));
+                VideoStats stats = mapResultSetToVideoStats(rs);
+                stats.setPlatformVideoId(rs.getString("platform_video_id"));
+                list.add(stats);
             }
 
         } catch (SQLException e) {
@@ -148,7 +176,14 @@ public class VideoRepository {
 
     public List<VideoStats> findTopByViews(int limit) {
         List<VideoStats> list = new ArrayList<>();
-        String sql = "SELECT * FROM videos ORDER BY views_count DESC LIMIT ?";
+        String sql = """
+            SELECT v.*, 
+                   COALESCE(y.id_youtube, vk.id_vk) as platform_video_id
+            FROM videos v
+            LEFT JOIN youtube y ON v.link = y.video_link
+            LEFT JOIN vk ON v.link = vk.video_link
+            ORDER BY v.views_count DESC LIMIT ?
+        """;
 
         try (Connection conn = DbConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -157,7 +192,9 @@ public class VideoRepository {
             ResultSet rs = pstmt.executeQuery();
 
             while (rs.next()) {
-                list.add(mapResultSetToVideoStats(rs));
+                VideoStats stats = mapResultSetToVideoStats(rs);
+                stats.setPlatformVideoId(rs.getString("platform_video_id"));
+                list.add(stats);
             }
 
         } catch (SQLException e) {
@@ -292,6 +329,7 @@ public class VideoRepository {
 
     private VideoStats mapResultSetToVideoStats(ResultSet rs) throws SQLException {
         VideoStats stats = new VideoStats();
+        stats.setId(rs.getLong("id"));  // ← ДОБАВИТЬ
         stats.setVideoUrl(rs.getString("link"));
         stats.setPlatform(rs.getString("platform"));
         stats.setTitle(rs.getString("title"));
