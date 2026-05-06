@@ -9,12 +9,34 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Репозиторий для работы с таблицами видео в БД.
+ *
+ * Основные таблицы:
+ * - videos: главная таблица со всеми видео
+ * - youtube: дополнительная информация для YouTube видео
+ * - vk: дополнительная информация для VK видео
+ * - views_history: история просмотров для аналитики
+ *
+ * Все методы используют HikariCP пул соединений через DbConnection.
+ */
 public class VideoRepository {
 
     // =============================================
     // ОСНОВНЫЕ МЕТОДЫ (таблица videos с id PRIMARY KEY)
     // =============================================
 
+    /**
+     * Сохраняет или обновляет видео в базе данных.
+     *
+     * Логика работы:
+     * 1. Если видео с таким link не существует → INSERT (создаётся новая запись)
+     * 2. Если видео существует → UPDATE (обновляются просмотры, название, дата)
+     * 3. После сохранения в videos, сохраняются платформозависимые данные (YouTube/VK ID)
+     * 4. Добавляется запись в историю просмотров (для аналитики динамики)
+     *
+     * @param stats объект VideoStats с данными для сохранения
+     */
     public void save(VideoStats stats) {
         if (stats == null) {
             Logger.error("Cannot save: VideoStats is null");
@@ -26,6 +48,8 @@ public class VideoRepository {
             return;
         }
 
+        // SQL с ON CONFLICT - upsert (update or insert)
+        // RETURNING id - возвращает ID созданной/обновлённой записи
         String sql = """
             INSERT INTO videos (link, platform, title, views_count, last_updated, hosting_unavailable)
             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
@@ -49,18 +73,25 @@ public class VideoRepository {
             ResultSet rs = pstmt.executeQuery();
             if (rs.next()) {
                 int id = rs.getInt("id");
-                stats.setId((long) id);  // ← ДОБАВИТЬ: заполняем ID в объекте
+                stats.setId((long) id);  // Сохраняем ID в объекте для дальнейшего использования
                 Logger.info("Сохранено в БД: " + stats.getVideoUrl() + " (id=" + id + ")");
-                saveToHistory(id, stats.getViewCount());
+                saveToHistory(id, stats.getViewCount());  // Сохраняем историю просмотров
             }
 
-            savePlatformSpecificData(stats);
+            savePlatformSpecificData(stats);  // Сохраняем YouTube/VK ID в соответствующие таблицы
 
         } catch (SQLException e) {
             Logger.error("Ошибка сохранения: " + e.getMessage());
         }
     }
 
+    /**
+     * Сохраняет запись в таблицу истории просмотров.
+     * Используется для отслеживания динамики изменения просмотров.
+     *
+     * @param videoId ID видео из таблицы videos
+     * @param viewsCount текущее количество просмотров
+     */
     public void saveToHistory(int videoId, long viewsCount) {
         String sql = "INSERT INTO views_history (video_id, views_count) VALUES (?, ?)";
         try (Connection conn = DbConnection.getConnection();
@@ -73,6 +104,12 @@ public class VideoRepository {
         }
     }
 
+    /**
+     * Сохраняет платформозависимые данные (YouTube ID или VK ID).
+     * Вызывается автоматически при сохранении видео.
+     *
+     * @param stats объект VideoStats с данными
+     */
     private void savePlatformSpecificData(VideoStats stats) {
         if ("YouTube".equalsIgnoreCase(stats.getPlatform())) {
             String videoId = extractYouTubeId(stats.getVideoUrl());
@@ -87,6 +124,12 @@ public class VideoRepository {
         }
     }
 
+    /**
+     * Находит видео по его ID в таблице videos.
+     *
+     * @param id первичный ключ из таблицы videos
+     * @return VideoStats или null, если не найдено
+     */
     public VideoStats findById(int id) {
         String sql = """
             SELECT v.*, 
@@ -115,6 +158,12 @@ public class VideoRepository {
         return null;
     }
 
+    /**
+     * Находит видео по URL ссылке.
+     *
+     * @param videoUrl полная ссылка на видео
+     * @return VideoStats или null, если не найдено
+     */
     public VideoStats findByUrl(String videoUrl) {
         if (videoUrl == null || videoUrl.isBlank()) {
             return null;
@@ -147,6 +196,11 @@ public class VideoRepository {
         return null;
     }
 
+    /**
+     * Возвращает список всех видео, отсортированный по ID (новые сверху).
+     *
+     * @return список VideoStats (может быть пустым, но не null)
+     */
     public List<VideoStats> findAll() {
         List<VideoStats> list = new ArrayList<>();
         String sql = """
@@ -174,6 +228,13 @@ public class VideoRepository {
         return list;
     }
 
+    /**
+     * Возвращает топ N видео по количеству просмотров.
+     * Используется для отображения "Топ-5 популярных видео".
+     *
+     * @param limit количество видео в топе (обычно 5)
+     * @return список VideoStats, отсортированный по убыванию просмотров
+     */
     public List<VideoStats> findTopByViews(int limit) {
         List<VideoStats> list = new ArrayList<>();
         String sql = """
@@ -203,6 +264,11 @@ public class VideoRepository {
         return list;
     }
 
+    /**
+     * Возвращает статистику: сколько видео на каждой платформе.
+     *
+     * @return Map<Платформа, Количество>
+     */
     public Map<String, Integer> getPlatformCount() {
         Map<String, Integer> result = new HashMap<>();
         String sql = "SELECT platform, COUNT(*) FROM videos GROUP BY platform";
@@ -221,6 +287,11 @@ public class VideoRepository {
         return result;
     }
 
+    /**
+     * Возвращает статистику: суммарное количество просмотров по платформам.
+     *
+     * @return Map<Платформа, Суммарные просмотры>
+     */
     public Map<String, Long> getPlatformViews() {
         Map<String, Long> result = new HashMap<>();
         String sql = "SELECT platform, SUM(views_count) FROM videos GROUP BY platform";
@@ -239,6 +310,17 @@ public class VideoRepository {
         return result;
     }
 
+    /**
+     * Возвращает динамику роста просмотров за последнюю неделю.
+     *
+     * Алгоритм:
+     * 1. Для каждого видео находим самую старую запись в истории за последние 7 дней
+     * 2. Сравниваем с текущими просмотрами
+     * 3. Вычисляем процент роста
+     * 4. Возвращаем топ-10 видео с наибольшим ростом
+     *
+     * @return список GrowthData с информацией о росте
+     */
     public List<GrowthData> getWeeklyGrowth() {
         List<GrowthData> result = new ArrayList<>();
         String sql = """
@@ -279,6 +361,11 @@ public class VideoRepository {
         return result;
     }
 
+    /**
+     * Возвращает суммарное количество просмотров всех видео.
+     *
+     * @return общее количество просмотров (0 если видео нет)
+     */
     public long getTotalViews() {
         String sql = "SELECT COALESCE(SUM(views_count), 0) as total FROM videos";
 
@@ -296,6 +383,11 @@ public class VideoRepository {
         return 0;
     }
 
+    /**
+     * Возвращает общее количество добавленных ссылок (видео).
+     *
+     * @return количество видео в базе
+     */
     public int getTotalLinks() {
         String sql = "SELECT COUNT(*) as total FROM videos";
 
@@ -313,6 +405,11 @@ public class VideoRepository {
         return 0;
     }
 
+    /**
+     * Удаляет видео из базы данных по URL.
+     *
+     * @param videoUrl полная ссылка на видео
+     */
     public void deleteByUrl(String videoUrl) {
         String sql = "DELETE FROM videos WHERE link = ?";
 
@@ -327,9 +424,17 @@ public class VideoRepository {
         }
     }
 
+    /**
+     * Преобразует ResultSet в объект VideoStats.
+     * Используется во всех SELECT методах для унификации.
+     *
+     * @param rs ResultSet из запроса
+     * @return заполненный объект VideoStats
+     * @throws SQLException при ошибках чтения из ResultSet
+     */
     private VideoStats mapResultSetToVideoStats(ResultSet rs) throws SQLException {
         VideoStats stats = new VideoStats();
-        stats.setId(rs.getLong("id"));  // ← ДОБАВИТЬ
+        stats.setId(rs.getLong("id"));
         stats.setVideoUrl(rs.getString("link"));
         stats.setPlatform(rs.getString("platform"));
         stats.setTitle(rs.getString("title"));
@@ -346,6 +451,13 @@ public class VideoRepository {
     // МЕТОДЫ ДЛЯ ТАБЛИЦЫ youtube
     // =============================================
 
+    /**
+     * Сохраняет или обновляет YouTube ID для видео.
+     * ID нужен для batch-запросов к YouTube API (экономия запросов).
+     *
+     * @param videoUrl ссылка на видео
+     * @param youtubeId 11-символьный ID видео на YouTube
+     */
     public void saveYouTubeId(String videoUrl, String youtubeId) {
         String sql = """
             INSERT INTO youtube (video_link, id_youtube, updated_at)
@@ -367,6 +479,12 @@ public class VideoRepository {
         }
     }
 
+    /**
+     * Находит YouTube ID по ссылке на видео.
+     *
+     * @param videoUrl ссылка на видео
+     * @return YouTube ID или null, если не найден
+     */
     public String findYouTubeIdByUrl(String videoUrl) {
         String sql = "SELECT id_youtube FROM youtube WHERE video_link = ?";
 
@@ -390,6 +508,14 @@ public class VideoRepository {
     // МЕТОДЫ ДЛЯ ТАБЛИЦЫ vk
     // =============================================
 
+    /**
+     * Сохраняет или обновляет VK ID для видео.
+     * ID нужен для batch-запросов к VK API.
+     *
+     * @param videoUrl ссылка на видео
+     * @param vkId VK ID видео (формат: ownerId_videoId)
+     * @param vkExternalId внешний ID (опционально)
+     */
     public void saveVkId(String videoUrl, String vkId, String vkExternalId) {
         String sql = """
             INSERT INTO vk (video_link, id_vk, id_vk_external, updated_at)
@@ -413,6 +539,12 @@ public class VideoRepository {
         }
     }
 
+    /**
+     * Находит VK ID по ссылке на видео.
+     *
+     * @param videoUrl ссылка на видео
+     * @return VK ID или null, если не найден
+     */
     public String findVkIdByUrl(String videoUrl) {
         String sql = "SELECT id_vk FROM vk WHERE video_link = ?";
 
@@ -433,9 +565,19 @@ public class VideoRepository {
     }
 
     // =============================================
-    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ (парсинг ID из URL)
     // =============================================
 
+    /**
+     * Извлекает YouTube Video ID из ссылки.
+     * Поддерживает форматы:
+     * - https://youtu.be/VIDEO_ID
+     * - https://youtube.com/watch?v=VIDEO_ID
+     * - https://www.youtube.com/watch?v=VIDEO_ID
+     *
+     * @param videoUrl полная ссылка на видео
+     * @return 11-символьный ID или null
+     */
     private String extractYouTubeId(String videoUrl) {
         if (videoUrl == null) return null;
 
@@ -455,6 +597,16 @@ public class VideoRepository {
         return null;
     }
 
+    /**
+     * Извлекает VK Video ID из ссылки.
+     * Поддерживает форматы:
+     * - https://vk.com/video-111905078_456248997
+     * - https://vkvideo.ru/video-111905078_456248997
+     * - https://vk.com/clip123456_789
+     *
+     * @param videoUrl полная ссылка на видео
+     * @return VK ID в формате "ownerId_videoId" или null
+     */
     private String extractVkId(String videoUrl) {
         if (videoUrl == null) return null;
 
@@ -476,11 +628,15 @@ public class VideoRepository {
     // ВНУТРЕННИЙ КЛАСС ДЛЯ ДАННЫХ РОСТА
     // =============================================
 
+    /**
+     * Вспомогательный класс для хранения данных о росте просмотров.
+     * Используется в методе getWeeklyGrowth().
+     */
     public static class GrowthData {
-        private String title;
-        private long oldViews;
-        private long newViews;
-        private double growthPercent;
+        private String title;          // Название видео
+        private long oldViews;         // Просмотры неделю назад
+        private long newViews;         // Текущие просмотры
+        private double growthPercent;  // Процент роста
 
         public String getTitle() { return title; }
         public void setTitle(String title) { this.title = title; }
