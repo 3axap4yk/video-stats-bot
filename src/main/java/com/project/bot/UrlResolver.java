@@ -28,22 +28,34 @@ public class UrlResolver {
 
     // Проверяет, что ссылка похожа на ссылку на видео и что ресурс отвечает успешным статусом.
     public boolean pointsToExistingVideo(String rawUrl) {
+        Logger.info("pointsToExistingVideo: начало для " + rawUrl);
+
         Optional<URI> uriOptional = extractUri(rawUrl);
         if (uriOptional.isEmpty()) {
+            Logger.warn("pointsToExistingVideo: URI пустой");
             return false;
         }
 
         URI uri = uriOptional.get();
         Platform platform = resolvePlatform(rawUrl);
+        Logger.info("pointsToExistingVideo: платформа = " + platform);
+
         if (platform == Platform.UNKNOWN || !hasVideoMarker(uri, platform)) {
+            Logger.warn("pointsToExistingVideo: нет маркера видео");
             return false;
         }
 
         if (platform == Platform.YOUTUBE) {
+            Logger.info("pointsToExistingVideo: проверяем YouTube oEmbed...");
             return respondsWithYouTubeOEmbed(uri.toString());
         }
 
-        return respondsWithSuccessStatus(uri.toString());
+        if (platform == Platform.VK) {
+            Logger.info("pointsToExistingVideo: проверяем VK через HTTP...");
+            return respondsWithSuccessStatus(uri.toString());
+        }
+
+        return false;
     }
 
     public Platform resolvePlatform(String rawUrl) {
@@ -182,6 +194,7 @@ public class UrlResolver {
 
     // Сетевой чек доступности: сначала HEAD, затем GET как fallback.
     private boolean respondsWithSuccessStatus(String rawUrl) {
+        Logger.info("respondsWithSuccessStatus: запрос к " + rawUrl);
         try {
             HttpURLConnection connection = (HttpURLConnection) URI.create(rawUrl).toURL().openConnection();
             connection.setRequestMethod("HEAD");
@@ -191,6 +204,7 @@ public class UrlResolver {
             connection.setRequestProperty("User-Agent", "video-stats-bot");
             int statusCode = connection.getResponseCode();
             connection.disconnect();
+            Logger.info("respondsWithSuccessStatus: HEAD статус = " + statusCode);
 
             if (statusCode >= 200 && statusCode < 400) {
                 return true;
@@ -204,9 +218,11 @@ public class UrlResolver {
             fallbackConnection.setRequestProperty("User-Agent", "video-stats-bot");
             int fallbackStatusCode = fallbackConnection.getResponseCode();
             fallbackConnection.disconnect();
+            Logger.info("respondsWithSuccessStatus: GET статус = " + fallbackStatusCode);
 
             return fallbackStatusCode >= 200 && fallbackStatusCode < 400;
         } catch (Exception e) {
+            Logger.error("respondsWithSuccessStatus: ошибка = " + e.getMessage());
             return false;
         }
     }
