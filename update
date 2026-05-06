@@ -24,6 +24,8 @@ else
   exit 1
 fi
 
+DB_CONTAINER="video_stats_db"
+
 echo "Проверяем доступность Telegram API..."
 if curl -Is --max-time 5 "https://api.telegram.org" > /dev/null 2>&1; then
     echo "✅ Telegram API доступен"
