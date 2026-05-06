@@ -80,6 +80,10 @@ until docker exec video_stats_db pg_isready -U "${DB_USER:-postgres}" > /dev/nul
 done
 echo "✅ База данных готова к работе"
 
+# Даём боту 5 секунд на запуск и первые сообщения
+echo "Ожидаем запуск бота..."
+sleep 5
+
 echo "Логи бота:"
 docker logs video_stats_bot --tail 30
 
