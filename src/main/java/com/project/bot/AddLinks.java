@@ -152,27 +152,6 @@ public class AddLinks {
             stats.setViewCount(viewCount);
             stats.setHostingUnavailable(false);
 
-            // Сохраняем ID платформы в соответствующую таблицу
-            if (platform == UrlResolver.Platform.YOUTUBE) {
-                String youtubeId = urlResolver.extractYouTubeIdFromUrl(normalizedUrl);
-                if (youtubeId != null && !youtubeId.isEmpty()) {
-                    stats.setPlatformVideoId(youtubeId);
-                    videoRepository.saveYouTubeId(normalizedUrl, youtubeId);
-                    Logger.info("Сохранён YouTube ID: " + youtubeId);
-                } else {
-                    Logger.warn("Не удалось извлечь YouTube ID из URL: " + normalizedUrl);
-                }
-            } else if (platform == UrlResolver.Platform.VK) {
-                String vkId = urlResolver.extractVkIdFromUrl(normalizedUrl);
-                if (vkId != null && !vkId.isEmpty()) {
-                    stats.setPlatformVideoId(vkId);
-                    videoRepository.saveVkId(normalizedUrl, vkId, null);
-                    Logger.info("Сохранён VK ID: " + vkId);
-                } else {
-                    Logger.warn("Не удалось извлечь VK ID из URL: " + normalizedUrl);
-                }
-            }
-
             // Клавиатура с кнопкой "Назад"
             InlineKeyboardButton backBtn = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
             InlineKeyboardMarkup backKeyboard = new InlineKeyboardMarkup(backBtn);
@@ -186,8 +165,31 @@ public class AddLinks {
                 return;
             }
 
-            // Сохранение в БД и вывод результата
+            // Сохранение в БД (сначала в videos, потом в специфические таблицы)
             videoRepository.save(stats);
+
+            // Сохраняем ID платформы в соответствующую таблицу ПОСЛЕ сохранения в videos
+            if (platform == UrlResolver.Platform.YOUTUBE) {
+                String youtubeId = urlResolver.extractYouTubeIdFromUrl(normalizedUrl);
+                if (youtubeId != null && !youtubeId.isEmpty()) {
+                    stats.setPlatformVideoId(youtubeId);
+                    videoRepository.saveYouTubeId(normalizedUrl, youtubeId);
+                    Logger.info("Сохранён YouTube ID: " + youtubeId);
+                } else {
+                    Logger.warn("Не удалось извлечь YouTube ID из URL: " + normalizedUrl);
+                }
+            } else if (platform == UrlResolver.Platform.VK) {
+                UrlResolver.VkVideoIds ids = urlResolver.extractVkIdsFromUrl(normalizedUrl);
+                if (ids != null && ids.getInternalId() != null && !ids.getInternalId().isEmpty()) {
+                    stats.setPlatformVideoId(ids.getInternalId());
+                    videoRepository.saveVkIdFull(normalizedUrl, ids.getInternalId(), ids.getExternalId());
+                    Logger.info("✅ Сохранён VK ID: internal=" + ids.getInternalId() +
+                            ", external=" + (ids.getExternalId() != null ? ids.getExternalId() : "null"));
+                } else {
+                    Logger.error("❌ VK ID не извлечён для: " + normalizedUrl);
+                }
+            }
+
             String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
                     + "\n\nСсылка добавлена.";
             bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));

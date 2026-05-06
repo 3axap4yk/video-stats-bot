@@ -22,10 +22,6 @@ import static com.project.bot.BotCallbacks.BACK;
 import static com.project.bot.BotMessages.BTN_BACK;
 import static com.project.utils.FormatUtils.formatViews;
 
-/**
- * Обработчик фонового обновления статистики всех сохранённых видео.
- * Использует batch-запросы к API для экономии квоты и ускорения работы.
- */
 public class RefreshStatsLinks {
 
     private final TelegramBot bot;
@@ -36,17 +32,14 @@ public class RefreshStatsLinks {
         this.videoRepository = new VideoRepository();
     }
 
-    // Обрабатывает клик по кнопке "Обновить статистику"
     public void onClick(long chatId, String callbackQueryId, int messageId) {
         bot.execute(new AnswerCallbackQuery(callbackQueryId));
 
-        // Отправляем сообщение о начале обновления и сохраняем его ID
         SendResponse response = bot.execute(
                 new SendMessage(chatId, "🔄 Обновляю статистику всех видео... Использую batch-режим для экономии API запросов.")
         );
         int loadingMessageId = response.message().messageId();
 
-        // Запускаем обновление в фоновом потоке
         new Thread(() -> {
             try {
                 performBatchUpdate(chatId, loadingMessageId);
@@ -58,11 +51,6 @@ public class RefreshStatsLinks {
         }).start();
     }
 
-    /**
-     * Выполняет batch-обновление всех видео.
-     * YouTube: до 50 видео за 1 запрос
-     * VK: до 25 видео за 1 запрос
-     */
     private void performBatchUpdate(long chatId, int loadingMessageId) {
         Logger.info("Начинаю BATCH-обновление статистики для чата: " + chatId);
 
@@ -74,7 +62,6 @@ public class RefreshStatsLinks {
             return;
         }
 
-        // Разделяем видео по платформам
         List<VideoStats> youtubeVideos = videos.stream()
                 .filter(v -> "YouTube".equalsIgnoreCase(v.getPlatform()))
                 .collect(Collectors.toList());
@@ -87,69 +74,54 @@ public class RefreshStatsLinks {
         int vkUpdated = 0;
         int errorCount = 0;
 
-        // === BATCH-ОБНОВЛЕНИЕ YOUTUBE (до 50 видео за запрос) ===
+        // === YOUTUBE ===
         if (!youtubeVideos.isEmpty()) {
             Logger.info("Обновляю " + youtubeVideos.size() + " YouTube видео (batch-режим, до 50 за запрос)");
             try {
                 YouTubeClient youTubeClient = new YouTubeClient();
                 youtubeUpdated = youTubeClient.updateVideoStatsBatch(youtubeVideos);
 
-                // Сохраняем обновленные видео в БД
-                for (VideoStats video : youtubeVideos) {
-                    videoRepository.save(video);
+                // Batch сохранение в БД
+                videoRepository.saveAll(youtubeVideos);
 
-                    // ✅ НОВОЕ: обновляем YouTube ID в таблице youtube
-                    if (video.getPlatformVideoId() != null && !video.getPlatformVideoId().isEmpty()) {
-                        videoRepository.saveYouTubeId(video.getVideoUrl(), video.getPlatformVideoId());
-                        Logger.info("Обновлён YouTube ID для: " + video.getVideoUrl() + " -> " + video.getPlatformVideoId());
-                    }
-                }
+                // Batch обновление YouTube ID
+                videoRepository.saveYouTubeIdsAll(youtubeVideos);
+
                 Logger.success("YouTube batch обновлён: " + youtubeUpdated + "/" + youtubeVideos.size());
             } catch (YouTubeException e) {
                 Logger.error("Ошибка batch-обновления YouTube: " + e.getMessage());
                 errorCount += youtubeVideos.size();
-                // Помечаем видео как недоступные
                 for (VideoStats video : youtubeVideos) {
                     video.setHostingUnavailable(true);
-                    videoRepository.save(video);
                 }
+                videoRepository.saveAll(youtubeVideos);
             }
         }
 
-        // === BATCH-ОБНОВЛЕНИЕ VK (до 25 видео за запрос) ===
+        // === VK ===
         if (!vkVideos.isEmpty()) {
             Logger.info("Обновляю " + vkVideos.size() + " VK видео (batch-режим, до 25 за запрос)");
             try {
                 VKVideoClient vkClient = new VKVideoClient();
                 vkUpdated = vkClient.updateVideoStatsBatch(vkVideos);
 
-                // Сохраняем обновленные видео в БД
-                for (VideoStats video : vkVideos) {
-                    videoRepository.save(video);
+                videoRepository.saveAll(vkVideos);
+                videoRepository.saveVkIdsAll(vkVideos);
 
-                    // ✅ НОВОЕ: обновляем VK ID в таблице vk
-                    if (video.getPlatformVideoId() != null && !video.getPlatformVideoId().isEmpty()) {
-                        videoRepository.saveVkId(video.getVideoUrl(), video.getPlatformVideoId(), null);
-                        Logger.info("Обновлён VK ID для: " + video.getVideoUrl() + " -> " + video.getPlatformVideoId());
-                    }
-                }
                 Logger.success("VK batch обновлён: " + vkUpdated + "/" + vkVideos.size());
             } catch (VKVideoException e) {
                 Logger.error("Ошибка batch-обновления VK: " + e.getMessage());
                 errorCount += vkVideos.size();
-                // Помечаем видео как недоступные
                 for (VideoStats video : vkVideos) {
                     video.setHostingUnavailable(true);
-                    videoRepository.save(video);
                 }
+                videoRepository.saveAll(vkVideos);
             }
         }
 
-        int totalUpdated = youtubeUpdated + vkUpdated;
         int totalVideos = videos.size();
         long totalViews = videoRepository.getTotalViews();
 
-        // Формируем детальное сообщение о результате
         StringBuilder resultMessage = new StringBuilder();
         resultMessage.append("✅ Batch-обновление завершено!\n\n");
         resultMessage.append("📊 Статистика:\n");
@@ -159,11 +131,10 @@ public class RefreshStatsLinks {
         resultMessage.append("• Всего видео: ").append(totalVideos).append("\n");
         resultMessage.append("• Суммарные просмотры: ").append(formatViews(totalViews)).append("\n\n");
 
-        // Добавляем информацию об экономии API запросов
-        int youtubeRequests = (youtubeVideos.size() + 49) / 50; // округление вверх
+        int youtubeRequests = (youtubeVideos.size() + 49) / 50;
         int vkRequests = (vkVideos.size() + 24) / 25;
         int totalRequests = youtubeRequests + vkRequests;
-        int oldRequests = totalVideos; // было: по 1 запросу на видео
+        int oldRequests = totalVideos;
         if (totalVideos > 0) {
             resultMessage.append("💡 Экономия API: ").append(oldRequests - totalRequests)
                     .append(" запросов (было ").append(oldRequests).append(", стало ").append(totalRequests).append(")");
@@ -173,7 +144,6 @@ public class RefreshStatsLinks {
                 new InlineKeyboardButton(BTN_BACK).callbackData(BACK)
         );
 
-        // Удаляем загрузочное сообщение и отправляем итоговый результат
         bot.execute(new DeleteMessage(chatId, loadingMessageId));
         bot.execute(new SendMessage(chatId, resultMessage.toString()).replyMarkup(keyboard));
         Logger.success("Batch-обновление завершено для чата: " + chatId);

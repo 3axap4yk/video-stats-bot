@@ -3,6 +3,7 @@ package com.project.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.model.VideoStats;
+import com.project.repository.VideoRepository;
 import com.project.utils.Logger;
 import io.github.cdimascio.dotenv.Dotenv;
 
@@ -26,13 +27,15 @@ public class VKVideoClient {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final Cache<String, JsonNode> responseCache;
-    private static final int VK_API_MAX_IDS = 25; // VK API ограничение на количество видео в одном запросе
+    private final VideoRepository videoRepository;
+    private static final int VK_API_MAX_IDS = 25;
 
     public VKVideoClient() {
         this.accessToken = loadAccessToken();
         this.apiVersion = loadApiVersion();
         this.httpClient = HttpClient.newHttpClient();
         this.objectMapper = new ObjectMapper();
+        this.videoRepository = new VideoRepository();
         this.responseCache = Caffeine.newBuilder()
                 .maximumSize(1000)
                 .expireAfterWrite(1, TimeUnit.HOURS)
@@ -53,12 +56,14 @@ public class VKVideoClient {
         Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
         String version = dotenv.get("VK_API_VERSION");
         if (version == null || version.trim().isEmpty()) {
-            return "5.131"; // версия по умолчанию
+            return "5.131";
         }
         return version.trim();
     }
 
     public long getViewCountByVideoId(String videoId) throws VKVideoException {
+        Logger.info("📊 VKVideoClient.getViewCountByVideoId: videoId = " + videoId);
+
         JsonNode response = getVideoInfo(videoId);
 
         JsonNode items = response.get("items");
@@ -72,13 +77,17 @@ public class VKVideoClient {
         }
 
         try {
-            return views.asLong();
+            long result = views.asLong();
+            Logger.info("📊 VKVideoClient.getViewCountByVideoId: views = " + result);
+            return result;
         } catch (Exception e) {
             throw new VKVideoException("Ошибка парсинга views count: " + e.getMessage(), e);
         }
     }
 
     public String getTitleByVideoId(String videoId) throws VKVideoException {
+        Logger.info("📝 VKVideoClient.getTitleByVideoId: videoId = " + videoId);
+
         JsonNode response = getVideoInfo(videoId);
 
         JsonNode items = response.get("items");
@@ -92,52 +101,69 @@ public class VKVideoClient {
         }
 
         try {
-            return title.asText();
+            String result = title.asText();
+            Logger.info("📝 VKVideoClient.getTitleByVideoId: title = " + result);
+            return result;
         } catch (Exception e) {
             throw new VKVideoException("Ошибка парсинга title: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Обновляет title и viewCount для пачки VideoStats одним запросом к VK API
-     *
-     * @param videoStatsList список видео для обновления
-     * @return количество успешно обновленных видео
-     */
     public int updateVideoStatsBatch(List<VideoStats> videoStatsList) throws VKVideoException {
+        Logger.info("🔄 VKVideoClient.updateVideoStatsBatch: список из " + (videoStatsList != null ? videoStatsList.size() : 0) + " видео");
+
         if (videoStatsList == null || videoStatsList.isEmpty()) {
             return 0;
         }
 
-        // Фильтруем видео с валидными ID
+        // Фильтруем видео с валидными platformVideoId
         List<VideoStats> validVideos = videoStatsList.stream()
-                .filter(vs -> vs.getVideoId() != null && !vs.getVideoId().isEmpty())
+                .filter(vs -> vs.getPlatformVideoId() != null && !vs.getPlatformVideoId().isEmpty())
                 .collect(Collectors.toList());
 
         if (validVideos.isEmpty()) {
+            Logger.warn("Нет видео с валидным platformVideoId для обновления VK");
             return 0;
         }
 
+        Logger.info("Валидных VK видео для обновления: " + validVideos.size());
+
         int totalUpdated = 0;
 
-        // Разбиваем на пачки по 25 (ограничение VK API)
         for (int i = 0; i < validVideos.size(); i += VK_API_MAX_IDS) {
             int end = Math.min(validVideos.size(), i + VK_API_MAX_IDS);
             List<VideoStats> batch = validVideos.subList(i, end);
+            Logger.info("Обработка пачки VK видео: " + batch.size() + " шт. (с " + i + " по " + end + ")");
             totalUpdated += updateBatch(batch);
         }
 
+        Logger.info("🔄 VKVideoClient.updateVideoStatsBatch: обновлено " + totalUpdated + " из " + validVideos.size());
         return totalUpdated;
     }
 
-    // Обновляет одну пачку видео (до 25 штук) одним запросом
     private int updateBatch(List<VideoStats> batch) throws VKVideoException {
-        // Формируем список видео ID в формате owner_id_video_id
-        String videoIds = batch.stream()
-                .map(VideoStats::getVideoId)
-                .collect(Collectors.joining(","));
+        // Формируем полные ID (с access_key если есть)
+        List<String> fullIds = new java.util.ArrayList<>();
+        Map<String, String> videoUrlToFullId = new HashMap<>();
 
-        // URL для массового запроса VK API
+        for (VideoStats video : batch) {
+            String internalId = video.getPlatformVideoId();
+            // Получаем externalId из БД
+            String externalId = videoRepository.findVkExternalIdByUrl(video.getVideoUrl());
+            String fullId;
+            if (externalId != null && !externalId.isEmpty()) {
+                fullId = internalId + "_" + externalId;
+                Logger.info("Используем полный ID с access_key для " + video.getVideoUrl() + ": " + fullId);
+            } else {
+                fullId = internalId;
+            }
+            fullIds.add(fullId);
+            videoUrlToFullId.put(video.getVideoUrl(), fullId);
+        }
+
+        String videoIds = String.join(",", fullIds);
+        Logger.info("VK Batch запрос для ID: " + videoIds);
+
         String url = String.format(
                 "https://api.vk.com/method/video.get?videos=%s&access_token=%s&v=%s",
                 videoIds, accessToken, apiVersion
@@ -153,13 +179,14 @@ public class VKVideoClient {
             int statusCode = response.statusCode();
             String responseBody = response.body();
 
+            Logger.info("VK API ответ: статус " + statusCode);
+
             if (statusCode != 200) {
                 handleErrorResponse(statusCode, responseBody);
             }
 
             JsonNode rootNode = objectMapper.readTree(responseBody);
 
-            // Проверяем наличие ошибки VK API
             if (rootNode.has("error")) {
                 handleVKError(rootNode.get("error"));
             }
@@ -171,54 +198,65 @@ public class VKVideoClient {
 
             JsonNode items = responseNode.get("items");
 
-            // Создаем Map для быстрого поиска данных по videoId
             Map<String, JsonNode> videoDataMap = new HashMap<>();
             if (items != null && items.isArray()) {
                 for (JsonNode item : items) {
                     String ownerId = item.get("owner_id").asText();
                     String videoId = item.get("id").asText();
-                    String fullId = ownerId + "_" + videoId;
-                    videoDataMap.put(fullId, item);
+                    String internalId = ownerId + "_" + videoId;
+                    // Проверяем наличие access_key в ответе
+                    String accessKey = item.has("access_key") ? item.get("access_key").asText() : null;
+                    if (accessKey != null) {
+                        videoDataMap.put(internalId + "_" + accessKey, item);
+                    }
+                    videoDataMap.put(internalId, item);
                 }
             }
 
-            // Обновляем каждый VideoStats в пачке
+            Logger.info("VK API вернул данных для " + videoDataMap.size() + " видео");
+
             int updatedCount = 0;
             for (VideoStats videoStats : batch) {
-                JsonNode videoData = videoDataMap.get(videoStats.getVideoId());
+                String fullId = videoUrlToFullId.get(videoStats.getVideoUrl());
+                JsonNode videoData = videoDataMap.get(fullId);
+
+                // Если не нашли по полному ID, пробуем по внутреннему
+                if (videoData == null && videoStats.getPlatformVideoId() != null) {
+                    videoData = videoDataMap.get(videoStats.getPlatformVideoId());
+                }
 
                 if (videoData != null) {
-                    // Получаем title
                     if (videoData.has("title")) {
                         videoStats.setTitle(videoData.get("title").asText());
                     }
 
-                    // Получаем views count
                     if (videoData.has("views")) {
                         videoStats.setViewCount(videoData.get("views").asLong());
                     }
 
-                    videoStats.setLastUpdated(LocalDateTime.now());
-                    videoStats.setHostingUnavailable(false);
-
-                    // ✅ НОВОЕ: заполняем platformVideoId (ID для API)
-                    if (videoStats.getPlatformVideoId() == null || videoStats.getPlatformVideoId().isEmpty()) {
-                        videoStats.setPlatformVideoId(videoStats.getVideoId());
+                    // Сохраняем access_key если он есть в ответе и ещё не сохранён
+                    if (videoData.has("access_key")) {
+                        String accessKey = videoData.get("access_key").asText();
+                        String currentExternal = videoRepository.findVkExternalIdByUrl(videoStats.getVideoUrl());
+                        if (currentExternal == null || currentExternal.isEmpty()) {
+                            videoRepository.saveVkIdFull(videoStats.getVideoUrl(),
+                                    videoStats.getPlatformVideoId(), accessKey);
+                            Logger.info("Сохранён access_key для " + videoStats.getVideoUrl() + ": " + accessKey);
+                        }
                     }
 
+                    videoStats.setLastUpdated(LocalDateTime.now());
+                    videoStats.setHostingUnavailable(false);
                     updatedCount++;
 
-                    // Кэшируем каждый полученный ответ
-                    responseCache.put(videoStats.getVideoId(), rootNode);
+                    responseCache.put(videoStats.getPlatformVideoId(), rootNode);
                 } else {
-                    // Видео не найдено или удалено
                     videoStats.setHostingUnavailable(true);
-                    Logger.warn("Видео не найдено в VK: " + videoStats.getVideoId());
+                    Logger.warn("Видео не найдено в VK API: " + videoStats.getPlatformVideoId());
                 }
             }
 
             Logger.info("VK Batch обновлен: " + updatedCount + "/" + batch.size() + " видео");
-
             return updatedCount;
         } catch (VKVideoException e) {
             throw e;
@@ -229,13 +267,15 @@ public class VKVideoClient {
     }
 
     private JsonNode getVideoInfo(String videoId) throws VKVideoException {
+        Logger.info("🔍 VKVideoClient.getVideoInfo: videoId = " + videoId);
+
         if (videoId == null || videoId.trim().isEmpty()) {
             throw new VKVideoException("ID видео не может быть пустым");
         }
 
-        // Проверяем кэш
         JsonNode cached = responseCache.getIfPresent(videoId);
         if (cached != null) {
+            Logger.info("VKVideoClient.getVideoInfo: возвращаем из кэша для " + videoId);
             return cached;
         }
 
@@ -260,7 +300,6 @@ public class VKVideoClient {
 
             JsonNode rootNode = objectMapper.readTree(responseBody);
 
-            // Проверяем наличие ошибки VK API
             if (rootNode.has("error")) {
                 handleVKError(rootNode.get("error"));
             }
@@ -270,8 +309,8 @@ public class VKVideoClient {
                 throw new VKVideoException("Некорректный ответ VK API: отсутствует поле 'response'");
             }
 
-            // Сохраняем в кэш
             responseCache.put(videoId, responseNode);
+            Logger.info("VKVideoClient.getVideoInfo: успешно получены данные для " + videoId);
 
             return responseNode;
         } catch (VKVideoException e) {
