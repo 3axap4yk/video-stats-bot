@@ -6,7 +6,7 @@ FROM gradle:8.5-jdk17 AS build
 WORKDIR /app
 
 # Копируем файлы сборки
-COPY build.gradle .
+COPY build.gradle.kts .
 COPY settings.gradle* .
 COPY gradlew .
 COPY gradle/ gradle/
