@@ -1,0 +1,86 @@
+#!/bin/bash
+
+cd "$(dirname "$0")"
+
+set -e
+
+LOCKFILE="/tmp/video-stats-update.lock"
+
+if [ -f "$LOCKFILE" ]; then
+  echo "⚠️ Скрипт уже выполняется"
+  exit 1
+fi
+
+trap "rm -f $LOCKFILE" EXIT
+touch "$LOCKFILE"
+
+# Загружаем .env
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+else
+  echo "❌ Файл .env не найден"
+  exit 1
+fi
+
+echo "Проверяем доступность Telegram API..."
+if curl -Is --max-time 5 "https://api.telegram.org" > /dev/null 2>&1; then
+    echo "✅ Telegram API доступен"
+else
+    echo "❌ ОШИБКА: Telegram API недоступен или соединение разорвано"
+    exit 1
+fi
+
+# Бэкап
+echo "📦 Создаём бэкап базы данных..."
+
+mkdir -p backups
+BACKUP_FILE="backups/backup_$(date +%F_%H-%M-%S).sql"
+
+if docker ps --format '{{.Names}}' | grep -q "$DB_CONTAINER"; then
+    docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" "$DB_NAME" > "$BACKUP_FILE"
+
+    if [ ! -s "$BACKUP_FILE" ]; then
+      echo "❌ Бэкап пустой"
+      exit 1
+    fi
+
+    echo "✅ Бэкап сохранён: $BACKUP_FILE"
+else
+    echo "⚠️ Контейнер БД не запущен, бэкап пропущен"
+fi
+
+# Обновление
+echo "📥 Обновляем код..."
+git pull
+
+echo "🛑 Останавливаем контейнеры..."
+docker compose down --remove-orphans
+
+echo "🔨 Пересобираем..."
+chmod +x ./gradlew || true
+./gradlew clean build
+
+echo "🐳 Запускаем..."
+docker compose up -d --build
+
+echo "Проверяем статус базы данных..."
+RETRIES=10
+until docker exec video_stats_db pg_isready -U "${DB_USER:-postgres}" > /dev/null 2>&1; do
+    RETRIES=$((RETRIES - 1))
+    if [ "$RETRIES" -le 0 ]; then
+        echo "❌ База данных не запустилась за отведённое время"
+        exit 1
+    fi
+    echo "⏳ Ожидание базы данных... ($RETRIES)"
+    sleep 1
+done
+echo "✅ База данных готова к работе"
+
+echo "Логи бота:"
+docker compose logs backend --tail=30
+
+echo ""
+echo "✅ Обновление завершено!"
+echo "📦 Бэкап: $BACKUP_FILE"
