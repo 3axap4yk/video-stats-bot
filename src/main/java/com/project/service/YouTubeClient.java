@@ -88,7 +88,7 @@ public class YouTubeClient {
     }
 
     /**
-     * НОВЫЙ МЕТОД: Обновляет title и viewCount для пачки VideoStats одним запросом к YouTube API
+     * Обновляет title и viewCount для пачки VideoStats одним запросом к YouTube API
      *
      * @param videoStatsList список видео для обновления
      * @return количество успешно обновленных видео
@@ -98,14 +98,17 @@ public class YouTubeClient {
             return 0;
         }
 
-        // Фильтруем видео с валидными ID
+        // Фильтруем видео с валидными platformVideoId
         List<VideoStats> validVideos = videoStatsList.stream()
-                .filter(vs -> vs.getVideoId() != null && !vs.getVideoId().isEmpty())
+                .filter(vs -> vs.getPlatformVideoId() != null && !vs.getPlatformVideoId().isEmpty())
                 .collect(Collectors.toList());
 
         if (validVideos.isEmpty()) {
+            Logger.warn("Нет видео с валидным platformVideoId для обновления YouTube");
             return 0;
         }
+
+        Logger.info("Валидных YouTube видео для обновления: " + validVideos.size());
 
         int totalUpdated = 0;
 
@@ -121,12 +124,14 @@ public class YouTubeClient {
 
     // Обновляет одну пачку видео (до 50 штук) одним запросом
     private int updateBatch(List<VideoStats> batch) throws YouTubeException {
-        // все videoId через запятую
+        // все platformVideoId через запятую
         String videoIds = batch.stream()
-                .map(VideoStats::getVideoId)
+                .map(VideoStats::getPlatformVideoId)
+                .filter(id -> id != null && !id.isEmpty())
                 .collect(Collectors.joining(","));
 
-        // URL для массового запроса
+        Logger.info("YouTube API запрос для ID: " + videoIds);
+
         String url = String.format(
                 "https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=%s&key=%s",
                 videoIds, apiKey
@@ -149,7 +154,7 @@ public class YouTubeClient {
             JsonNode rootNode = objectMapper.readTree(responseBody);
             JsonNode items = rootNode.get("items");
 
-            // Создаем Map для быстрого поиска данных по videoId
+            // Создаем Map для быстрого поиска данных по platformVideoId
             Map<String, JsonNode> videoDataMap = new HashMap<>();
             if (items != null && items.isArray()) {
                 for (JsonNode item : items) {
@@ -158,10 +163,13 @@ public class YouTubeClient {
                 }
             }
 
+            Logger.info("YouTube API вернул данных для " + videoDataMap.size() + " видео");
+
             // Обновляем каждый VideoStats в пачке
             int updatedCount = 0;
             for (VideoStats videoStats : batch) {
-                JsonNode videoData = videoDataMap.get(videoStats.getVideoId());
+                String platformId = videoStats.getPlatformVideoId();
+                JsonNode videoData = videoDataMap.get(platformId);
 
                 if (videoData != null) {
                     // Получаем title из snippet
@@ -180,17 +188,16 @@ public class YouTubeClient {
                     videoStats.setHostingUnavailable(false);
                     updatedCount++;
 
-                    // Кэшируем каждый полученный ответ
-                    responseCache.put(videoStats.getVideoId(), rootNode);
+                    // Кэшируем полученный ответ
+                    responseCache.put(platformId, rootNode);
                 } else {
                     // Видео не найдено или удалено
                     videoStats.setHostingUnavailable(true);
-                    Logger.warn("Видео не найдено: " + videoStats.getVideoId());
+                    Logger.warn("Видео не найдено в YouTube API: " + platformId);
                 }
             }
 
-            Logger.info("Batch обновлен: " + updatedCount + "/" + batch.size() + " видео");
-
+            Logger.info("YouTube Batch обновлен: " + updatedCount + "/" + batch.size() + " видео");
             return updatedCount;
         } catch (YouTubeException e) {
             throw e;

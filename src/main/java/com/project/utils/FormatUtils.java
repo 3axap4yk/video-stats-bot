@@ -49,4 +49,24 @@ public final class FormatUtils {
         double billions = views / 1_000_000_000.0;
         return String.format(Locale.ROOT, "%.1fB", billions).replace(",", ".");
     }
+
+    /**
+     * Экранирует спецсимволы HTML для безопасной вставки пользовательских данных
+     * Заменяет: & < > " '
+     *
+     * @param text исходный текст
+     * @return текст с экранированными HTML-символами
+     */
+    public static String escapeHtml(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
+    }
+
 }
