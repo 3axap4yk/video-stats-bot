@@ -36,7 +36,7 @@ public class RefreshStatsLinks {
         bot.execute(new AnswerCallbackQuery(callbackQueryId));
 
         SendResponse response = bot.execute(
-                new SendMessage(chatId, "🔄 Обновляю статистику всех видео... Использую batch-режим для экономии API запросов.")
+                new SendMessage(chatId, "🔄 Обновляю статистику всех видео...")
         );
         int loadingMessageId = response.message().messageId();
 
@@ -52,7 +52,7 @@ public class RefreshStatsLinks {
     }
 
     private void performBatchUpdate(long chatId, int loadingMessageId) {
-        Logger.info("Начинаю BATCH-обновление статистики для чата: " + chatId);
+        Logger.info("Начинаю обновление статистики для чата: " + chatId);
 
         List<VideoStats> videos = videoRepository.findAll();
 
@@ -123,7 +123,7 @@ public class RefreshStatsLinks {
         long totalViews = videoRepository.getTotalViews();
 
         StringBuilder resultMessage = new StringBuilder();
-        resultMessage.append("✅ Batch-обновление завершено!\n\n");
+        resultMessage.append("✅ Обновление завершено!\n\n");
         resultMessage.append("📊 Статистика:\n");
         resultMessage.append("• YouTube: ").append(youtubeUpdated).append("/").append(youtubeVideos.size()).append("\n");
         resultMessage.append("• VK: ").append(vkUpdated).append("/").append(vkVideos.size()).append("\n");
@@ -131,21 +131,12 @@ public class RefreshStatsLinks {
         resultMessage.append("• Всего видео: ").append(totalVideos).append("\n");
         resultMessage.append("• Суммарные просмотры: ").append(formatViews(totalViews)).append("\n\n");
 
-        int youtubeRequests = (youtubeVideos.size() + 49) / 50;
-        int vkRequests = (vkVideos.size() + 24) / 25;
-        int totalRequests = youtubeRequests + vkRequests;
-        int oldRequests = totalVideos;
-        if (totalVideos > 0) {
-            resultMessage.append("💡 Экономия API: ").append(oldRequests - totalRequests)
-                    .append(" запросов (было ").append(oldRequests).append(", стало ").append(totalRequests).append(")");
-        }
-
         InlineKeyboardMarkup keyboard = new InlineKeyboardMarkup(
                 new InlineKeyboardButton(BTN_BACK).callbackData(BACK)
         );
 
         bot.execute(new DeleteMessage(chatId, loadingMessageId));
         bot.execute(new SendMessage(chatId, resultMessage.toString()).replyMarkup(keyboard));
-        Logger.success("Batch-обновление завершено для чата: " + chatId);
+        Logger.success("Обновление завершено для чата: " + chatId);
     }
 }
