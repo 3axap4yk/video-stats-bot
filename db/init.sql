@@ -33,7 +33,7 @@ CREATE SEQUENCE IF NOT EXISTS public.youtube_id_seq
 
 -- 3. Таблица videos (общая информация о видео)
 CREATE TABLE IF NOT EXISTS public.videos (
-    id INTEGER NOT NULL DEFAULT nextval('public.videos_id_seq'),
+                                             id INTEGER NOT NULL DEFAULT nextval('public.videos_id_seq'),
     link TEXT NOT NULL,
     platform VARCHAR(50),
     title TEXT,
@@ -43,11 +43,11 @@ CREATE TABLE IF NOT EXISTS public.videos (
     created_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT videos_pkey PRIMARY KEY (id),
     CONSTRAINT videos_link_key UNIQUE (link)
-);
+    );
 
 -- 4. Таблица vk (специфичные данные для VK)
 CREATE TABLE IF NOT EXISTS public.vk (
-    id INTEGER NOT NULL DEFAULT nextval('public.vk_video_info_id_seq'),
+                                         id INTEGER NOT NULL DEFAULT nextval('public.vk_video_info_id_seq'),
     video_link TEXT NOT NULL,
     id_vk VARCHAR(50),
     created_at TIMESTAMP DEFAULT NOW(),
@@ -55,12 +55,12 @@ CREATE TABLE IF NOT EXISTS public.vk (
     CONSTRAINT vk_video_info_pkey PRIMARY KEY (id),
     CONSTRAINT vk_video_info_video_link_key UNIQUE (video_link),
     CONSTRAINT vk_videos_fk FOREIGN KEY (video_link)
-        REFERENCES public.videos(link) ON DELETE CASCADE
-);
+    REFERENCES public.videos(link) ON DELETE CASCADE
+    );
 
 -- 5. Таблица youtube (специфичные данные для YouTube)
 CREATE TABLE IF NOT EXISTS public.youtube (
-    id INTEGER NOT NULL DEFAULT nextval('public.youtube_id_seq'),
+                                              id INTEGER NOT NULL DEFAULT nextval('public.youtube_id_seq'),
     video_link TEXT NOT NULL,
     id_youtube VARCHAR(50),
     created_at TIMESTAMP DEFAULT NOW(),
@@ -68,18 +68,18 @@ CREATE TABLE IF NOT EXISTS public.youtube (
     CONSTRAINT youtube_pkey PRIMARY KEY (id),
     CONSTRAINT youtube_video_link_key UNIQUE (video_link),
     CONSTRAINT youtube_video_link_fkey FOREIGN KEY (video_link)
-        REFERENCES public.videos(link) ON DELETE CASCADE
-);
+    REFERENCES public.videos(link) ON DELETE CASCADE
+    );
 
 -- 6. Таблица истории просмотров (для аналитики)
 CREATE TABLE IF NOT EXISTS public.views_history (
-    id SERIAL PRIMARY KEY,
-    video_id INTEGER NOT NULL,
-    views_count BIGINT NOT NULL,
-    recorded_at TIMESTAMP DEFAULT NOW(),
+                                                    id SERIAL PRIMARY KEY,
+                                                    video_id INTEGER NOT NULL,
+                                                    views_count BIGINT NOT NULL,
+                                                    recorded_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT views_history_video_id_fkey FOREIGN KEY (video_id)
-        REFERENCES public.videos(id) ON DELETE CASCADE
-);
+    REFERENCES public.videos(id) ON DELETE CASCADE
+    );
 
 -- 7. Привязка последовательностей к колонкам
 ALTER SEQUENCE public.videos_id_seq OWNED BY public.videos.id;
@@ -150,7 +150,82 @@ COMMENT ON COLUMN public.views_history.video_id IS 'Ссылка на видео
 COMMENT ON COLUMN public.views_history.views_count IS 'Количество просмотров в момент замера';
 COMMENT ON COLUMN public.views_history.recorded_at IS 'Время замера';
 
--- 10. Обновление статистики для оптимизатора
+-- =====================================================
+-- НОРМАЛИЗАЦИЯ ПЛАТФОРМ (триггер)
+-- =====================================================
+
+-- 10. Функция нормализации платформ
+CREATE OR REPLACE FUNCTION normalize_platform()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.platform ILIKE '%youtube%' THEN
+        NEW.platform := 'YouTube';
+    ELSIF NEW.platform ILIKE '%vk%' THEN
+        NEW.platform := 'VK';
+    ELSIF NEW.platform ILIKE '%rutube%' THEN
+        NEW.platform := 'RuTube';
+    ELSIF NEW.platform ILIKE '%дзен%' OR NEW.platform ILIKE '%zen%' THEN
+        NEW.platform := 'Дзен';
+ELSE
+        NEW.platform := 'UNKNOWN';
+END IF;
+
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 11. Триггер для автоматической нормализации платформ
+DROP TRIGGER IF EXISTS trg_normalize_platform ON public.videos;
+CREATE TRIGGER trg_normalize_platform
+    BEFORE INSERT OR UPDATE OF platform ON public.videos
+    FOR EACH ROW
+    EXECUTE FUNCTION normalize_platform();
+
+-- =====================================================
+-- ТРИГГЕРЫ ДЛЯ АВТОМАТИЧЕСКОГО ЛОГИРОВАНИЯ ИСТОРИИ ПРОСМОТРОВ
+-- =====================================================
+
+-- 12. Функция для INSERT (новое видео)
+CREATE OR REPLACE FUNCTION log_new_video()
+RETURNS TRIGGER AS $$
+BEGIN
+INSERT INTO views_history (video_id, views_count, recorded_at)
+VALUES (NEW.id, NEW.views_count, NOW());
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 13. Триггер на INSERT
+DROP TRIGGER IF EXISTS trigger_log_new_video ON public.videos;
+CREATE TRIGGER trigger_log_new_video
+    AFTER INSERT ON public.videos
+    FOR EACH ROW
+    EXECUTE FUNCTION log_new_video();
+
+-- 14. Функция для UPDATE (изменение просмотров)
+CREATE OR REPLACE FUNCTION log_views_change()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.views_count IS DISTINCT FROM NEW.views_count THEN
+        INSERT INTO views_history (video_id, views_count, recorded_at)
+        VALUES (NEW.id, NEW.views_count, NOW());
+END IF;
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 15. Триггер на UPDATE
+DROP TRIGGER IF EXISTS trigger_log_views_change ON public.videos;
+CREATE TRIGGER trigger_log_views_change
+    AFTER UPDATE OF views_count ON public.videos
+    FOR EACH ROW
+    WHEN (OLD.views_count IS DISTINCT FROM NEW.views_count)
+    EXECUTE FUNCTION log_views_change();
+
+-- =====================================================
+-- ОБНОВЛЕНИЕ СТАТИСТИКИ ДЛЯ ОПТИМИЗАТОРА
+-- =====================================================
+
 ANALYZE public.videos;
 ANALYZE public.vk;
 ANALYZE public.youtube;
