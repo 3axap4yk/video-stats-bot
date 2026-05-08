@@ -17,7 +17,7 @@ DB_USER="${DB_USER:-admin}"
 DB_NAME="${DB_NAME:-hackaton_db}"
 
 # Папка для бэкапов
-BACKUP_DIR="backups"
+BACKUP_DIR="./backups"
 mkdir -p "$BACKUP_DIR"
 
 # Имя файла с датой
