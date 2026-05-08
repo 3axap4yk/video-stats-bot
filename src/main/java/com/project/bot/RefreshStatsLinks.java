@@ -15,6 +15,7 @@ import com.project.service.YouTubeException;
 import com.project.service.VKVideoException;
 import com.project.utils.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -79,7 +80,12 @@ public class RefreshStatsLinks {
 
         int youtubeUpdated = 0;
         int vkUpdated = 0;
-        int errorCount = 0;
+
+        // Счётчики ошибок
+        int youtubeApiErrors = 0;
+        int vkApiErrors = 0;
+        int youtubeUnavailable = 0;
+        int vkUnavailable = 0;
 
         // === YOUTUBE ===
         if (!youtubeVideos.isEmpty()) {
@@ -88,16 +94,21 @@ public class RefreshStatsLinks {
                 YouTubeClient youTubeClient = new YouTubeClient();
                 youtubeUpdated = youTubeClient.updateVideoStatsBatch(youtubeVideos);
 
+                // Подсчитываем недоступные видео
+                for (VideoStats video : youtubeVideos) {
+                    if (video.isHostingUnavailable()) {
+                        youtubeUnavailable++;
+                    }
+                }
+
                 // Batch сохранение в БД
                 videoRepository.saveAll(youtubeVideos);
-
-                // Batch обновление YouTube ID
                 videoRepository.saveYouTubeIdsAll(youtubeVideos);
 
                 Logger.success("YouTube batch обновлён: " + youtubeUpdated + "/" + youtubeVideos.size());
             } catch (YouTubeException e) {
                 Logger.error("Ошибка batch-обновления YouTube: " + e.getMessage());
-                errorCount += youtubeVideos.size();
+                youtubeApiErrors = youtubeVideos.size();
                 for (VideoStats video : youtubeVideos) {
                     video.setHostingUnavailable(true);
                 }
@@ -112,13 +123,20 @@ public class RefreshStatsLinks {
                 VKVideoClient vkClient = new VKVideoClient();
                 vkUpdated = vkClient.updateVideoStatsBatch(vkVideos);
 
+                // Подсчитываем недоступные видео
+                for (VideoStats video : vkVideos) {
+                    if (video.isHostingUnavailable()) {
+                        vkUnavailable++;
+                    }
+                }
+
                 videoRepository.saveAll(vkVideos);
                 videoRepository.saveVkIdsAll(vkVideos);
 
                 Logger.success("VK batch обновлён: " + vkUpdated + "/" + vkVideos.size());
             } catch (VKVideoException e) {
                 Logger.error("Ошибка batch-обновления VK: " + e.getMessage());
-                errorCount += vkVideos.size();
+                vkApiErrors = vkVideos.size();
                 for (VideoStats video : vkVideos) {
                     video.setHostingUnavailable(true);
                 }
@@ -129,12 +147,40 @@ public class RefreshStatsLinks {
         int totalVideos = videos.size();
         long totalViews = videoRepository.getTotalViews();
 
+        int totalApiErrors = youtubeApiErrors + vkApiErrors;
+        int totalUnavailable = youtubeUnavailable + vkUnavailable;
+
         StringBuilder resultMessage = new StringBuilder();
         resultMessage.append("✅ Обновление завершено!\n\n");
         resultMessage.append("📊 Статистика:\n");
         resultMessage.append("• YouTube: ").append(youtubeUpdated).append("/").append(youtubeVideos.size()).append("\n");
         resultMessage.append("• VK: ").append(vkUpdated).append("/").append(vkVideos.size()).append("\n");
-        resultMessage.append("• Ошибок: ").append(errorCount).append("\n");
+        resultMessage.append("• Ошибок: ").append(totalApiErrors + totalUnavailable).append("\n\n");
+
+        // ⚠️ Ошибка обновления (API)
+        if (totalApiErrors > 0) {
+            resultMessage.append("⚠️ Ошибка обновления (").append(totalApiErrors).append("):\n");
+            if (youtubeApiErrors > 0) {
+                resultMessage.append("• YouTube: ").append(youtubeApiErrors).append(" видео (ошибка API)\n");
+            }
+            if (vkApiErrors > 0) {
+                resultMessage.append("• VK: ").append(vkApiErrors).append(" видео (ошибка API)\n");
+            }
+            resultMessage.append("\n");
+        }
+
+        // ⚠️ Видео недоступно
+        if (totalUnavailable > 0) {
+            resultMessage.append("⚠️ Видео недоступно (").append(totalUnavailable).append("):\n");
+            if (youtubeUnavailable > 0) {
+                resultMessage.append("• YouTube: ").append(youtubeUnavailable).append(" видео\n");
+            }
+            if (vkUnavailable > 0) {
+                resultMessage.append("• VK: ").append(vkUnavailable).append(" видео\n");
+            }
+            resultMessage.append("\n");
+        }
+
         resultMessage.append("• Всего видео: ").append(totalVideos).append("\n");
         resultMessage.append("• Суммарные просмотры: ").append(formatViews(totalViews)).append("\n\n");
 
