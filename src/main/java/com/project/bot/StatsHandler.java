@@ -71,7 +71,7 @@ public class StatsHandler {
 
                 sb.append("• <b>").append(FormatUtils.escapeHtml(g.getTitle())).append("</b>\n")
                         .append("  ").append(arrow).append(String.format("%.1f%%", Math.abs(percent)))
-                        .append(" (").append(arrow).append(diffFormatted).append(") ")
+                        .append(" (").append(diffFormatted).append(") ")
                         .append(FormatUtils.formatViews(g.getOldViews()))
                         .append(" → ").append(FormatUtils.formatViews(g.getNewViews())).append("\n\n");
             }
