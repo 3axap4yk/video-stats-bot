@@ -39,6 +39,7 @@ public class VKVideoClient {
                 .build();
     }
 
+    // Загрузка VK токена
     private String loadAccessToken() {
         Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
         String token = dotenv.get("VK_ACCESS_TOKEN");
@@ -49,6 +50,7 @@ public class VKVideoClient {
         return token.trim();
     }
 
+    // Загрузка версии API VK
     private String loadApiVersion() {
         Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
         String version = dotenv.get("VK_API_VERSION");
@@ -58,6 +60,7 @@ public class VKVideoClient {
         return version.trim();
     }
 
+    // Парсинг просмотров видео
     public long getViewCountByVideoId(String videoId) throws VKVideoException {
         JsonNode response = getVideoInfo(videoId);
 
@@ -78,6 +81,7 @@ public class VKVideoClient {
         }
     }
 
+    // Парсинг названия видео
     public String getTitleByVideoId(String videoId) throws VKVideoException {
         JsonNode response = getVideoInfo(videoId);
 
@@ -228,6 +232,7 @@ public class VKVideoClient {
         }
     }
 
+    // Запрос к VKVideo
     private JsonNode getVideoInfo(String videoId) throws VKVideoException {
         if (videoId == null || videoId.trim().isEmpty()) {
             throw new VKVideoException("ID видео не может быть пустым");
@@ -282,6 +287,7 @@ public class VKVideoClient {
         }
     }
 
+    // Обработка VK API ошибок
     private void handleErrorResponse(int statusCode, String responseBody) throws VKVideoException {
         if (statusCode == 403) {
             throw new VKVideoException("Ошибка авторизации VK API. Проверьте VK_ACCESS_TOKEN в .env");
@@ -311,6 +317,7 @@ public class VKVideoClient {
         }
     }
 
+    // Очистка кэша
     public void clearCache() {
         responseCache.invalidateAll();
         Logger.info("Кэш VK API очищен");

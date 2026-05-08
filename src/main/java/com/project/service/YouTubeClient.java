@@ -37,6 +37,7 @@ public class YouTubeClient {
                 .build();
     }
 
+    // Загрузка YouTube токена
     private String loadApiKey() {
         Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
         String key = dotenv.get("YOUTUBE_API_KEY");
@@ -47,6 +48,7 @@ public class YouTubeClient {
         return key.trim();
     }
 
+    // Парсинг просмотров видео
     public long getViewCountByVideoId(String videoId) throws YouTubeException {
         JsonNode root = getVideoInfo(videoId);
 
@@ -67,6 +69,7 @@ public class YouTubeClient {
         }
     }
 
+    // Парсинг названия видео
     public String getTitleByVideoId(String videoId) throws YouTubeException {
         JsonNode root = getVideoInfo(videoId);
 
@@ -206,6 +209,7 @@ public class YouTubeClient {
         }
     }
 
+    // Запрос к YouTube по ID
     private JsonNode getVideoInfo(String videoId) throws YouTubeException {
         if (videoId == null || videoId.trim().isEmpty()) {
             throw new YouTubeException("ID видео не может быть пустым");
@@ -250,6 +254,7 @@ public class YouTubeClient {
         }
     }
 
+    // Ошибки API
     private void handleErrorResponse(int statusCode, String responseBody) throws YouTubeException {
         if (statusCode == 403) {
             if (responseBody.contains("accessNotConfigured")) {
@@ -263,6 +268,7 @@ public class YouTubeClient {
         throw new YouTubeException(String.format("YouTube API вернул ошибку %d: %s", statusCode, responseBody));
     }
 
+    // Очистка кэша (Опционально)
     public void clearCache() {
         responseCache.invalidateAll();
         Logger.info("Кэш YouTube API очищен");
