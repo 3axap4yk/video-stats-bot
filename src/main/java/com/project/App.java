@@ -42,8 +42,6 @@ public class App {
 
         Logger.success("Конфигурация загружена успешно");
 
-        DbConnection.initDatabase();
-
         boolean dbAvailable = DbConnection.isDatabaseAvailable();
         if (!dbAvailable) {
             Logger.warn("БД недоступна, бот будет работать без сохранения данных");
