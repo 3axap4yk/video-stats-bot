@@ -38,6 +38,7 @@ public class StatisticsService {
         }
     }
 
+    // Определение YouTube или VK
     private HostingType detectedHostingType(String videoUrl) {
         String lowerUrl = videoUrl.toLowerCase();
         if (lowerUrl.contains("youtube.com") || lowerUrl.contains("youtu.be")) {
