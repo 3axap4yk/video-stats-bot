@@ -29,6 +29,8 @@ if [ ! -s "$BACKUP_FILE" ]; then
   exit 1
 fi
 
+FULL_PATH="$(pwd)/$BACKUP_FILE"
+
 echo "✅ Дамп базы создан: $BACKUP_FILE ($(du -h "$BACKUP_FILE" | cut -f1))"
 echo ""
 echo "📋 Инструкция по миграции БД на новый сервер:"
