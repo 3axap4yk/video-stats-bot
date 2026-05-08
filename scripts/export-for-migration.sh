@@ -31,7 +31,7 @@ echo "📁 Копируем файлы проекта..."
 cp .env "$EXPORT_DIR/.env"
 cp docker-compose.yml "$EXPORT_DIR/"
 cp Dockerfile "$EXPORT_DIR/"
-cp run.sh "$EXPORT_DIR/"
+cp run "$EXPORT_DIR/"
 cp -r db "$EXPORT_DIR/" 2>/dev/null || true
 cp -r scripts "$EXPORT_DIR/" 2>/dev/null || true
 
