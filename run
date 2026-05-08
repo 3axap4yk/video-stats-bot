@@ -19,6 +19,22 @@ else
     exit 1
 fi
 
+echo "Проверяем доступность YouTube API..."
+if curl -Is --max-time 5 "https://www.googleapis.com" > /dev/null 2>&1; then
+    echo "✅ YouTube API доступен"
+else
+    echo "❌ ОШИБКА: YouTube API недоступен или соединение разорвано"
+    exit 1
+fi
+
+echo "Проверяем доступность VK API..."
+if curl -Is --max-time 5 "https://api.vk.com" > /dev/null 2>&1; then
+    echo "✅ VK API доступен"
+else
+    echo "❌ ОШИБКА: VK API недоступен или соединение разорвано"
+    exit 1
+fi
+
 echo "Очищаем старое окружение..."
 docker compose down --remove-orphans
 

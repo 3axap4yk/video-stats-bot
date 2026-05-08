@@ -1,3 +1,5 @@
+#!/bin/bash
+
 cd "$(dirname "$0")/.."
 
 set -e
@@ -12,39 +14,40 @@ else
 fi
 
 DB_CONTAINER="video_stats_db"
-EXPORT_DIR="migration_$(date +%F_%H-%M-%S)"
+BACKUP_DIR="backups"
+BACKUP_FILE="${BACKUP_DIR}/backup_$(date +%F_%H-%M-%S).sql"
 
-mkdir -p "$EXPORT_DIR"
+# Создаём папку для бэкапов, если её нет
+mkdir -p "$BACKUP_DIR"
 
-echo "📦 Создаём бэкап базы..."
-docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" "$DB_NAME" > "$EXPORT_DIR/backup.sql"
+echo "📦 Создаём дамп базы данных..."
+docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" "$DB_NAME" > "$BACKUP_FILE"
 
-if [ ! -s "$EXPORT_DIR/backup.sql" ]; then
-  echo "❌ Бэкап пустой"
-  rm -rf "$EXPORT_DIR"
+if [ ! -s "$BACKUP_FILE" ]; then
+  echo "❌ Дамп пустой"
+  rm -f "$BACKUP_FILE"
   exit 1
 fi
 
-echo "📁 Копируем файлы проекта..."
-cp .env "$EXPORT_DIR/.env"
-cp docker-compose.yml "$EXPORT_DIR/"
-cp Dockerfile "$EXPORT_DIR/"
-cp run.sh "$EXPORT_DIR/"
-cp -r db "$EXPORT_DIR/" 2>/dev/null || true
-cp -r scripts "$EXPORT_DIR/" 2>/dev/null || true
+FULL_PATH="$(pwd)/$BACKUP_FILE"
 
-echo "🗜️ Архивируем..."
-tar -czf "${EXPORT_DIR}.tar.gz" "$EXPORT_DIR"
-rm -rf "$EXPORT_DIR"
-
+echo "✅ Дамп базы создан: $BACKUP_FILE ($(du -h "$BACKUP_FILE" | cut -f1))"
 echo ""
-echo "✅ Миграционный пакет готов: ${EXPORT_DIR}.tar.gz"
+echo "📋 Инструкция по миграции БД на новый сервер:"
 echo ""
-echo "Перенесите его на новый сервер:"
-echo "  scp ${EXPORT_DIR}.tar.gz user@new-server:/home/user/"
+echo "1️⃣  Скопируйте дамп на новый сервер:"
+echo "    scp $BACKUP_FILE user@new-server:/path/to/project/backups/"
 echo ""
-echo "На новом сервере выполните:"
-echo "  tar -xzf ${EXPORT_DIR}.tar.gz"
-echo "  cd ${EXPORT_DIR}"
-echo "  ./run.sh"
-echo "  ./scripts/restore-db.sh backup.sql"
+echo "    Или с нового сервера:"
+echo "    scp $USER@<IP-исходного-сервера>:$FULL_PATH /home/ivan/"
+echo ""
+echo "    Например:"
+echo "    scp bot@45.15.127.213:$FULL_PATH /home/ivan/"
+echo ""
+echo "2️⃣  На новом сервере перейдите в папку с проектом:"
+echo "    cd /path/to/project"
+echo ""
+echo "3️⃣  В корневой папке проекта выполните:"
+echo "    ./scripts/restore-db.sh $(basename "$BACKUP_FILE")"
+echo ""
+echo "    (укажите путь к файлу дампа, если он не в корне проекта)"
