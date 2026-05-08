@@ -1,7 +1,7 @@
 package com.project.bot;
 
 public final class BotMessages {
-   // public static final String ACCESS_DENIED = "У вас нет доступа к этому боту.";
+    public static final String ACCESS_DENIED = "⚠️ У вас нет доступа к этому боту ⚠️";
     public static final String GREETING = "Доступные команды:";
     public static final String PROMPT_SEND_URL = "Отправьте URL.";
     public static final String DEAD_LINK = "Отправленная Вами ссылка никуда не ведет. Проверьте и попробуйте добавить снова";
@@ -24,14 +24,15 @@ public final class BotMessages {
 
     public static final String WELCOME = """
         <b>VideoStats Bot</b>
-
-        Бот для отслеживания статистики видео по ссылкам.
-
+        Приветствую! 👋
+        Это бот для отслеживания статистики видео по ссылкам с Youtube и VK.
+            
         <b>Функции:</b>
         — Добавление ссылок на видео
         — Просмотр списка отслеживаемых ссылок
         — Обновление статистики
         — Просмотр сводной статистики
+            
         """;
 
 
