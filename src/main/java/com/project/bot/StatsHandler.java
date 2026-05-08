@@ -68,10 +68,11 @@ public class StatsHandler {
                 String arrow = diff >= 0 ? "📈 +" : "📉 ";
                 double percent = g.getGrowthPercent();
                 String diffFormatted = FormatUtils.formatViews(Math.abs(diff));
+                String sign = diff >= 0 ? "+" : "-";
 
                 sb.append("• <b>").append(FormatUtils.escapeHtml(g.getTitle())).append("</b>\n")
                         .append("  ").append(arrow).append(String.format("%.1f%%", Math.abs(percent)))
-                        .append(" (").append(diffFormatted).append(") ")
+                        .append(" (").append(sign).append(diffFormatted).append(") | ")
                         .append(FormatUtils.formatViews(g.getOldViews()))
                         .append(" → ").append(FormatUtils.formatViews(g.getNewViews())).append("\n\n");
             }
