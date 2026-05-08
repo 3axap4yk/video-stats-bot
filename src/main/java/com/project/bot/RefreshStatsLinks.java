@@ -62,12 +62,19 @@ public class RefreshStatsLinks {
             return;
         }
 
+        // Нормализуем платформы перед обработкой
+        for (VideoStats video : videos) {
+            if (video.getPlatform() != null && video.getPlatform().equalsIgnoreCase("VK Video")) {
+                video.setPlatform("VK");
+            }
+        }
+
         List<VideoStats> youtubeVideos = videos.stream()
                 .filter(v -> "YouTube".equalsIgnoreCase(v.getPlatform()))
                 .collect(Collectors.toList());
 
         List<VideoStats> vkVideos = videos.stream()
-                .filter(v -> "VK".equalsIgnoreCase(v.getPlatform()) || "VK Video".equalsIgnoreCase(v.getPlatform()))
+                .filter(v -> "VK".equalsIgnoreCase(v.getPlatform()))
                 .collect(Collectors.toList());
 
         int youtubeUpdated = 0;
