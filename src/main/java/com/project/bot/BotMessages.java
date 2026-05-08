@@ -10,10 +10,8 @@ public final class BotMessages {
     public static final String VIDEO_STATS_TEMPLATE = "Название: %s\nПросмотры: %s\nПлатформа: %s";
     public static final String REQUEST_IN_PROGRESS = "Выполняю запрос…";
     public static final String YOUTUBE_API_FAILED = "Не удалось получить данные с YouTube (API или сеть). Попробуйте ещё раз позже.";
-    public static final String VK_STATS_NOT_SUPPORTED = "Для VK пока нет загрузки названия и просмотров через API. Используйте ссылку на YouTube.";
+
     public static final String ADD_LINK_CANCELLED = "Добавление ссылки отменено.";
-    public static final String LINKS_LIST_UNAVAILABLE = "Список ссылок пока недоступен.";
-    public static final String REFRESH_STATS_UNAVAILABLE = "Обновление статистики пока недоступно.";
 
     public static final String BTN_ADD_LINK = "\u2795 Добавить ссылку";
     public static final String BTN_LINKS_LIST = "\uD83D\uDCCB Список ссылок";
