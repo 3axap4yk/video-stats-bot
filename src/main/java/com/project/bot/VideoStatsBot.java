@@ -98,6 +98,10 @@ public class VideoStatsBot {
             // Проверка прав доступа пользователя
             if (!userWhitelist.allows(userId)) {
                 Logger.warn("Доступ запрещён для user: " + userId + " — сообщение игнорируется");
+                long deniedChatId = resolveChatId(update);
+                if (deniedChatId != -1L) {
+                    bot.execute(new SendMessage(deniedChatId, BotMessages.ACCESS_DENIED));
+                }
                 continue;
             }
 

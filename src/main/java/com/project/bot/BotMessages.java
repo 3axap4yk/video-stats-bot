@@ -1,7 +1,7 @@
 package com.project.bot;
 
 public final class BotMessages {
-   // public static final String ACCESS_DENIED = "У вас нет доступа к этому боту.";
+    public static final String ACCESS_DENIED = "⚠️ У вас нет доступа к этому боту ⚠️";
     public static final String GREETING = "Доступные команды:";
     public static final String PROMPT_SEND_URL = "Отправьте URL.";
     public static final String DEAD_LINK = "Отправленная Вами ссылка никуда не ведет. Проверьте и попробуйте добавить снова";
@@ -10,10 +10,8 @@ public final class BotMessages {
     public static final String VIDEO_STATS_TEMPLATE = "Название: %s\nПросмотры: %s\nПлатформа: %s";
     public static final String REQUEST_IN_PROGRESS = "Выполняю запрос…";
     public static final String YOUTUBE_API_FAILED = "Не удалось получить данные с YouTube (API или сеть). Попробуйте ещё раз позже.";
-    public static final String VK_STATS_NOT_SUPPORTED = "Для VK пока нет загрузки названия и просмотров через API. Используйте ссылку на YouTube.";
+
     public static final String ADD_LINK_CANCELLED = "Добавление ссылки отменено.";
-    public static final String LINKS_LIST_UNAVAILABLE = "Список ссылок пока недоступен.";
-    public static final String REFRESH_STATS_UNAVAILABLE = "Обновление статистики пока недоступно.";
 
     public static final String BTN_ADD_LINK = "\u2795 Добавить ссылку";
     public static final String BTN_LINKS_LIST = "\uD83D\uDCCB Список ссылок";
@@ -24,14 +22,15 @@ public final class BotMessages {
 
     public static final String WELCOME = """
         <b>VideoStats Bot</b>
-
-        Бот для отслеживания статистики видео по ссылкам.
-
+        Приветствую! 👋
+        Это бот для отслеживания статистики видео по ссылкам с Youtube и VK.
+            
         <b>Функции:</b>
         — Добавление ссылок на видео
         — Просмотр списка отслеживаемых ссылок
         — Обновление статистики
         — Просмотр сводной статистики
+            
         """;
 
 

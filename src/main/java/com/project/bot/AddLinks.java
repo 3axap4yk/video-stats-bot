@@ -152,15 +152,18 @@ public class AddLinks {
             stats.setViewCount(viewCount);
             stats.setHostingUnavailable(false);
 
-            // Клавиатура с кнопкой "Назад"
+            // Клавиатура с кнопкой "Добавить ссылку" и "Вернуться"
             InlineKeyboardButton backBtn = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
-            InlineKeyboardMarkup backKeyboard = new InlineKeyboardMarkup(backBtn);
+            InlineKeyboardButton addLinkBtn = new InlineKeyboardButton(BTN_ADD_LINK).callbackData(BotCallbacks.ADD_LINK);
+            InlineKeyboardMarkup backKeyboard = new InlineKeyboardMarkup(
+                    new InlineKeyboardButton[][]{{addLinkBtn}, {backBtn}}
+            );
 
             // Проверка на дубликат
             VideoStats existing = videoRepository.findByUrl(stats.getVideoUrl());
             if (existing != null) {
                 String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
-                        + "\n\nЭта ссылка уже добавлена.";
+                        + "\n\nЭта ссылка уже добавлена. Попробуйте ещё раз, воспользовавшись кнопкой «Добавить ссылку»";
                 bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
                 return;
             }
@@ -190,7 +193,7 @@ public class AddLinks {
             }
 
             String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
-                    + "\n\nСсылка добавлена.";
+                    + "\n\nСсылка добавлена. Если хотите добавить ещё, воспользуйтесь кнопкой «Добавить ссылку»";
             bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
         } finally {
             // Удаляем сообщение о прогрессе в любом случае
