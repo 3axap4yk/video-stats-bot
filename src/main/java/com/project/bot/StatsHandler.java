@@ -64,12 +64,16 @@ public class StatsHandler {
             sb.append("(Данные появятся через несколько дней после добавления видео)\n");
         } else {
             for (var g : growth) {
-                String arrow = g.getGrowthPercent() >= 0 ? "📈 +" : "📉 ";
+                long diff = g.getNewViews() - g.getOldViews();
+                String arrow = diff >= 0 ? "📈 +" : "📉 ";
+                double percent = g.getGrowthPercent();
+                String diffFormatted = FormatUtils.formatViews(Math.abs(diff));
+
                 sb.append("• <b>").append(FormatUtils.escapeHtml(g.getTitle())).append("</b>\n")
-                        .append("  ").append(arrow).append(String.format("%.1f", Math.abs(g.getGrowthPercent()))).append("%")
-                        .append(" (").append(FormatUtils.formatViews(g.getOldViews()))
-                        .append(" → ").append(FormatUtils.formatViews(g.getNewViews()))
-                        .append(")\n\n");
+                        .append("  ").append(arrow).append(String.format("%.1f%%", Math.abs(percent)))
+                        .append(" (").append(arrow).append(diffFormatted).append(") ")
+                        .append(FormatUtils.formatViews(g.getOldViews()))
+                        .append(" → ").append(FormatUtils.formatViews(g.getNewViews())).append("\n\n");
             }
         }
 
