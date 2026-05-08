@@ -50,7 +50,6 @@ CREATE TABLE IF NOT EXISTS public.vk (
     id INTEGER NOT NULL DEFAULT nextval('public.vk_video_info_id_seq'),
     video_link TEXT NOT NULL,
     id_vk VARCHAR(50),
-    id_vk_external VARCHAR(50),
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT vk_video_info_pkey PRIMARY KEY (id),
@@ -142,7 +141,6 @@ COMMENT ON COLUMN public.videos.hosting_unavailable IS 'Флаг недосту�
 
 COMMENT ON TABLE public.vk IS 'Специфичные данные для видео VK';
 COMMENT ON COLUMN public.vk.id_vk IS 'Внутренний ID видео в VK';
-COMMENT ON COLUMN public.vk.id_vk_external IS 'Внешний ID видео в VK';
 
 COMMENT ON TABLE public.youtube IS 'Специфичные данные для видео YouTube';
 COMMENT ON COLUMN public.youtube.id_youtube IS 'ID видео на YouTube';
