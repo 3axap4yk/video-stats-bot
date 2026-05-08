@@ -67,7 +67,6 @@ public class VideoRepository {
                 int id = rs.getInt("id");
                 stats.setId((long) id);
                 Logger.info("Сохранено в БД: " + stats.getVideoUrl() + " (id=" + id + ")");
-                saveToHistory(id, stats.getViewCount());
             }
 
             savePlatformSpecificData(stats);
@@ -131,8 +130,8 @@ public class VideoRepository {
 
         } catch (SQLException e) {
             Logger.error("Ошибка batch сохранения: " + e.getMessage());
-            try {
-                DbConnection.getConnection().rollback();
+            try (Connection conn = DbConnection.getConnection()) {
+                conn.rollback();
             } catch (SQLException ex) {
                 Logger.error("Ошибка отката транзакции: " + ex.getMessage());
             }
@@ -197,11 +196,10 @@ public class VideoRepository {
         }
 
         String sql = """
-            INSERT INTO vk (video_link, id_vk, id_vk_external, updated_at)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            INSERT INTO vk (video_link, id_vk, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT (video_link) DO UPDATE SET
                 id_vk = EXCLUDED.id_vk,
-                id_vk_external = EXCLUDED.id_vk_external,
                 updated_at = CURRENT_TIMESTAMP
         """;
 
@@ -216,7 +214,6 @@ public class VideoRepository {
                 if (stats.getPlatformVideoId() != null && !stats.getPlatformVideoId().isEmpty()) {
                     pstmt.setString(1, stats.getVideoUrl());
                     pstmt.setString(2, stats.getPlatformVideoId());
-                    pstmt.setString(3, null); // id_vk_external пока не используем
                     pstmt.addBatch();
                     batchCount++;
                 }
@@ -233,18 +230,6 @@ public class VideoRepository {
         }
     }
 
-    public void saveToHistory(int videoId, long viewsCount) {
-        String sql = "INSERT INTO views_history (video_id, views_count) VALUES (?, ?)";
-        try (Connection conn = DbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, videoId);
-            pstmt.setLong(2, viewsCount);
-            pstmt.executeUpdate();
-        } catch (SQLException e) {
-            Logger.error("Ошибка сохранения истории: " + e.getMessage());
-        }
-    }
-
     private void savePlatformSpecificData(VideoStats stats) {
         if ("YouTube".equalsIgnoreCase(stats.getPlatform())) {
             String videoId = extractYouTubeId(stats.getVideoUrl());
@@ -254,7 +239,7 @@ public class VideoRepository {
         } else if ("VK".equalsIgnoreCase(stats.getPlatform()) || "VK Video".equalsIgnoreCase(stats.getPlatform())) {
             String vkId = extractVkId(stats.getVideoUrl());
             if (vkId != null) {
-                saveVkId(stats.getVideoUrl(), vkId, null);
+                saveVkId(stats.getVideoUrl(), vkId);
             }
         }
     }
@@ -562,13 +547,12 @@ public class VideoRepository {
     // МЕТОДЫ ДЛЯ ТАБЛИЦЫ vk (одиночные)
     // =============================================
 
-    public void saveVkId(String videoUrl, String vkId, String vkExternalId) {
+    public void saveVkId(String videoUrl, String vkId) {
         String sql = """
-            INSERT INTO vk (video_link, id_vk, id_vk_external, updated_at)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            INSERT INTO vk (video_link, id_vk, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT (video_link) DO UPDATE SET
                 id_vk = EXCLUDED.id_vk,
-                id_vk_external = EXCLUDED.id_vk_external,
                 updated_at = CURRENT_TIMESTAMP
         """;
 
@@ -577,7 +561,6 @@ public class VideoRepository {
 
             pstmt.setString(1, videoUrl);
             pstmt.setString(2, vkId);
-            pstmt.setString(3, vkExternalId);
             pstmt.executeUpdate();
 
         } catch (SQLException e) {
@@ -602,6 +585,35 @@ public class VideoRepository {
             Logger.error("Ошибка поиска VK ID: " + e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * Сохраняет VK ID для видео
+     *
+     * @param videoUrl ссылка на видео
+     * @param internalId внутренний ID (ownerId_videoId)
+     */
+    public void saveVkIdFull(String videoUrl, String internalId) {
+        String sql = """
+            INSERT INTO vk (video_link, id_vk, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT (video_link) DO UPDATE SET
+                id_vk = EXCLUDED.id_vk,
+                updated_at = CURRENT_TIMESTAMP
+        """;
+
+        try (Connection conn = DbConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, videoUrl);
+            pstmt.setString(2, internalId);
+            pstmt.executeUpdate();
+
+            Logger.info("Сохранён VK ID: " + internalId);
+
+        } catch (SQLException e) {
+            Logger.error("Ошибка сохранения VK ID: " + e.getMessage());
+        }
     }
 
     // =============================================
@@ -662,52 +674,5 @@ public class VideoRepository {
         public void setNewViews(long newViews) { this.newViews = newViews; }
         public double getGrowthPercent() { return growthPercent; }
         public void setGrowthPercent(double growthPercent) { this.growthPercent = growthPercent; }
-    }
-
-    /**
-     * Сохраняет или обновляет VK ID (внутренний и внешний) для видео
-     *
-     * @param videoUrl ссылка на видео
-     * @param internalId внутренний ID (ownerId_videoId)
-     * @param externalId внешний ID (access_key)
-     */
-    public void saveVkIdFull(String videoUrl, String internalId, String externalId) {
-        String sql = """
-        INSERT INTO vk (video_link, id_vk, id_vk_external, updated_at)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT (video_link) DO UPDATE SET
-            id_vk = EXCLUDED.id_vk,
-            id_vk_external = EXCLUDED.id_vk_external,
-            updated_at = CURRENT_TIMESTAMP
-    """;
-
-        try (Connection conn = DbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
-            pstmt.setString(1, videoUrl);
-            pstmt.setString(2, internalId);
-            pstmt.setString(3, externalId);
-            pstmt.executeUpdate();
-
-            Logger.info("Сохранён VK ID: internal=" + internalId + ", external=" + externalId);
-
-        } catch (SQLException e) {
-            Logger.error("Ошибка сохранения VK ID: " + e.getMessage());
-        }
-    }
-
-    public String findVkExternalIdByUrl(String videoUrl) {
-        String sql = "SELECT id_vk_external FROM vk WHERE video_link = ?";
-        try (Connection conn = DbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, videoUrl);
-            ResultSet rs = pstmt.executeQuery();
-            if (rs.next()) {
-                return rs.getString("id_vk_external");
-            }
-        } catch (SQLException e) {
-            Logger.error("Ошибка поиска VK external ID: " + e.getMessage());
-        }
-        return null;
     }
 }

@@ -137,7 +137,6 @@ public class DbConnection {
                 id SERIAL PRIMARY KEY,
                 video_link TEXT NOT NULL UNIQUE,          -- Ссылка на VK видео (связь с videos.link)
                 id_vk VARCHAR(50),                        -- VK ID видео (ownerId_videoId)
-                id_vk_external VARCHAR(50),               -- Внешний ID (access_key для видео других владельцев)
                 created_at TIMESTAMP DEFAULT NOW(),       -- Время создания записи
                 updated_at TIMESTAMP DEFAULT NOW()        -- Время последнего обновления
             );

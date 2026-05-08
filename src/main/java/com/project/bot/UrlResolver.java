@@ -22,32 +22,6 @@ public class UrlResolver {
         UNKNOWN
     }
 
-    // Класс для хранения VK ID (внутренний и внешний)
-    public static class VkVideoIds {
-        private final String internalId;   // ownerId_videoId (например: -167789771_456239595)
-        private final String externalId;   // access_key (например: 220df2876123d3542f)
-
-        public VkVideoIds(String internalId, String externalId) {
-            this.internalId = internalId;
-            this.externalId = externalId;
-        }
-
-        public String getInternalId() { return internalId; }
-        public String getExternalId() { return externalId; }
-
-        // Полный ID для API (с access_key если есть)
-        public String getFullId() {
-            if (externalId != null && !externalId.isEmpty()) {
-                return internalId + "_" + externalId;
-            }
-            return internalId;
-        }
-
-        public boolean hasExternalId() {
-            return externalId != null && !externalId.isEmpty();
-        }
-    }
-
     // Проверяет только общий формат URL (http/https + host), без проверки существования видео.
     public boolean isValidUrl(String rawUrl) {
         return extractHost(rawUrl).isPresent();
@@ -129,8 +103,8 @@ public class UrlResolver {
         return null;
     }
 
-    // Извлекает VK ID из URL (внутренний и внешний)
-    public VkVideoIds extractVkIdsFromUrl(String url) {
+    // Извлекает VK ID из URL (простой метод, возвращает только internalId)
+    public String extractVkIdFromUrl(String url) {
         if (url == null) return null;
 
         Logger.info("Извлекаем VK ID из URL: " + url);
@@ -139,40 +113,18 @@ public class UrlResolver {
         Pattern pattern = Pattern.compile("video(-?\\d+_\\d+)");
         Matcher matcher = pattern.matcher(url);
         if (!matcher.find()) {
-            Logger.warn("Не удалось извлечь VK внутренний ID из: " + url);
+            Logger.warn("Не удалось извлечь VK ID из: " + url);
             return null;
         }
 
-        String internalId = matcher.group(1);  // например: -167789771_456239595 или 167789771_456239595
+        String internalId = matcher.group(1);
         // Для сообществ ownerId должен быть с минусом
         if (!internalId.startsWith("-") && url.contains("video-")) {
             internalId = "-" + internalId;
         }
-        Logger.info("Внутренний VK ID: " + internalId);
+        Logger.info("VK ID: " + internalId);
 
-        // Извлекаем access_key (внешний ID) из query-параметров
-        String externalId = null;
-        try {
-            URI uri = new URI(url);
-            String query = uri.getQuery();
-            if (query != null && query.contains("access_key=")) {
-                String[] params = query.split("&");
-                for (String param : params) {
-                    if (param.startsWith("access_key=")) {
-                        externalId = param.split("=")[1];
-                        break;
-                    }
-                }
-            }
-        } catch (URISyntaxException e) {
-            Logger.warn("Не удалось разобрать URL для извлечения access_key: " + url);
-        }
-
-        if (externalId != null) {
-            Logger.info("Внешний VK ID (access_key): " + externalId);
-        }
-
-        return new VkVideoIds(internalId, externalId);
+        return internalId;
     }
 
     // Безопасно извлекает host в нижнем регистре.

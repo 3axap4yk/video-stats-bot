@@ -179,12 +179,11 @@ public class AddLinks {
                     Logger.warn("Не удалось извлечь YouTube ID из URL: " + normalizedUrl);
                 }
             } else if (platform == UrlResolver.Platform.VK) {
-                UrlResolver.VkVideoIds ids = urlResolver.extractVkIdsFromUrl(normalizedUrl);
-                if (ids != null && ids.getInternalId() != null && !ids.getInternalId().isEmpty()) {
-                    stats.setPlatformVideoId(ids.getInternalId());
-                    videoRepository.saveVkIdFull(normalizedUrl, ids.getInternalId(), ids.getExternalId());
-                    Logger.info("✅ Сохранён VK ID: internal=" + ids.getInternalId() +
-                            ", external=" + (ids.getExternalId() != null ? ids.getExternalId() : "null"));
+                String vkId = urlResolver.extractVkIdFromUrl(normalizedUrl);
+                if (vkId != null && !vkId.isEmpty()) {
+                    stats.setPlatformVideoId(vkId);
+                    videoRepository.saveVkIdFull(normalizedUrl, vkId);
+                    Logger.info("✅ Сохранён VK ID: " + vkId);
                 } else {
                     Logger.error("❌ VK ID не извлечён для: " + normalizedUrl);
                 }
