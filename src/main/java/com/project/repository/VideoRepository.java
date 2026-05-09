@@ -43,36 +43,108 @@ public class VideoRepository {
         }
 
         String sql = """
-            INSERT INTO videos (link, platform, title, views_count, last_updated, hosting_unavailable)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
-            ON CONFLICT (link) DO UPDATE SET
-                views_count = EXCLUDED.views_count,
-                title = EXCLUDED.title,
-                last_updated = CURRENT_TIMESTAMP,
-                hosting_unavailable = EXCLUDED.hosting_unavailable
-            RETURNING id
-        """;
+        INSERT INTO videos (link, platform, title, views_count, last_updated, hosting_unavailable)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+        ON CONFLICT (link) DO UPDATE SET
+            views_count = EXCLUDED.views_count,
+            title = EXCLUDED.title,
+            last_updated = CURRENT_TIMESTAMP,
+            hosting_unavailable = EXCLUDED.hosting_unavailable
+        RETURNING id
+    """;
 
-        try (Connection conn = DbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
 
+        try {
+            conn = DbConnection.getConnection();
+            conn.setAutoCommit(false);  // 🔥 НАЧАЛО ТРАНЗАКЦИИ
+
+            pstmt = conn.prepareStatement(sql);
             pstmt.setString(1, stats.getVideoUrl());
             pstmt.setString(2, stats.getPlatform());
             pstmt.setString(3, stats.getTitle());
             pstmt.setLong(4, stats.getViewCount());
             pstmt.setBoolean(5, stats.isHostingUnavailable());
 
-            ResultSet rs = pstmt.executeQuery();
+            rs = pstmt.executeQuery();
             if (rs.next()) {
                 int id = rs.getInt("id");
                 stats.setId((long) id);
                 Logger.info("Сохранено в БД: " + stats.getVideoUrl() + " (id=" + id + ")");
             }
 
-            savePlatformSpecificData(stats);
+            // 🔥 СОХРАНЯЕМ ПЛАТФОРМЕННЫЕ ДАННЫЕ В ТОЙ ЖЕ ТРАНЗАКЦИИ
+            savePlatformSpecificDataInTransaction(conn, stats);
+
+            conn.commit();  // 🔥 ФИКСАЦИЯ ВСЕХ ИЗМЕНЕНИЙ
+            Logger.info("Транзакция успешно зафиксирована для: " + stats.getVideoUrl());
 
         } catch (SQLException e) {
+            if (conn != null) {
+                try {
+                    conn.rollback();  // 🔥 ОТКАТ ВСЕГО
+                    Logger.warn("Транзакция откачена для: " + stats.getVideoUrl());
+                } catch (SQLException rollbackEx) {
+                    Logger.error("Ошибка отката: " + rollbackEx.getMessage());
+                }
+            }
             Logger.error("Ошибка сохранения: " + e.getMessage());
+
+        } finally {
+            // Закрываем ресурсы
+            try { if (rs != null) rs.close(); } catch (SQLException e) {}
+            try { if (pstmt != null) pstmt.close(); } catch (SQLException e) {}
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true);  // Возвращаем по умолчанию
+                    conn.close();
+                } catch (SQLException e) {
+                    Logger.error("Ошибка закрытия соединения: " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    /**
+     * Сохраняет платформенно-специфичные данные В ТОЙ ЖЕ ТРАНЗАКЦИИ
+     */
+    private void savePlatformSpecificDataInTransaction(Connection conn, VideoStats stats) throws SQLException {
+        if ("YouTube".equalsIgnoreCase(stats.getPlatform())) {
+            String videoId = extractYouTubeId(stats.getVideoUrl());
+            if (videoId != null && !videoId.isEmpty()) {
+                String sql = """
+                INSERT INTO youtube (video_link, id_youtube, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (video_link) DO UPDATE SET
+                    id_youtube = EXCLUDED.id_youtube,
+                    updated_at = CURRENT_TIMESTAMP
+            """;
+                try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                    pstmt.setString(1, stats.getVideoUrl());
+                    pstmt.setString(2, videoId);
+                    pstmt.executeUpdate();
+                    Logger.info("YouTube ID сохранён в транзакции: " + videoId);
+                }
+            }
+        } else if ("VK".equalsIgnoreCase(stats.getPlatform()) || "VK Video".equalsIgnoreCase(stats.getPlatform())) {
+            String vkId = extractVkId(stats.getVideoUrl());
+            if (vkId != null && !vkId.isEmpty()) {
+                String sql = """
+                INSERT INTO vk (video_link, id_vk, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (video_link) DO UPDATE SET
+                    id_vk = EXCLUDED.id_vk,
+                    updated_at = CURRENT_TIMESTAMP
+            """;
+                try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                    pstmt.setString(1, stats.getVideoUrl());
+                    pstmt.setString(2, vkId);
+                    pstmt.executeUpdate();
+                    Logger.info("VK ID сохранён в транзакции: " + vkId);
+                }
+            }
         }
     }
 
