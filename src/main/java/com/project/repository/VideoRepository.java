@@ -88,52 +88,64 @@ public class VideoRepository {
         }
 
         String sql = """
-            INSERT INTO videos (link, platform, title, views_count, last_updated, hosting_unavailable)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
-            ON CONFLICT (link) DO UPDATE SET
-                views_count = EXCLUDED.views_count,
-                title = EXCLUDED.title,
-                last_updated = CURRENT_TIMESTAMP,
-                hosting_unavailable = EXCLUDED.hosting_unavailable
-        """;
+        INSERT INTO videos (link, platform, title, views_count, last_updated, hosting_unavailable)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+        ON CONFLICT (link) DO UPDATE SET
+            views_count = EXCLUDED.views_count,
+            title = EXCLUDED.title,
+            last_updated = CURRENT_TIMESTAMP,
+            hosting_unavailable = EXCLUDED.hosting_unavailable
+    """;
 
         int savedCount = 0;
+        Connection conn = null;  // ✅ ВЫНОСИМ ОБЪЯВЛЕНИЕ
 
-        try (Connection conn = DbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
+        try {
+            conn = DbConnection.getConnection();  // ✅ СОЗДАЁМ ВРУЧНУЮ
             conn.setAutoCommit(false);
 
-            for (VideoStats stats : statsList) {
-                if (stats.getVideoUrl() == null || stats.getVideoUrl().isBlank()) {
-                    continue;
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                for (VideoStats stats : statsList) {
+                    if (stats.getVideoUrl() == null || stats.getVideoUrl().isBlank()) {
+                        continue;
+                    }
+
+                    pstmt.setString(1, stats.getVideoUrl());
+                    pstmt.setString(2, stats.getPlatform());
+                    pstmt.setString(3, stats.getTitle());
+                    pstmt.setLong(4, stats.getViewCount());
+                    pstmt.setBoolean(5, stats.isHostingUnavailable());
+                    pstmt.addBatch();
                 }
 
-                pstmt.setString(1, stats.getVideoUrl());
-                pstmt.setString(2, stats.getPlatform());
-                pstmt.setString(3, stats.getTitle());
-                pstmt.setLong(4, stats.getViewCount());
-                pstmt.setBoolean(5, stats.isHostingUnavailable());
-                pstmt.addBatch();
-            }
+                int[] results = pstmt.executeBatch();
+                conn.commit();  // ✅ ФИКСАЦИЯ
 
-            int[] results = pstmt.executeBatch();
-            conn.commit();
-
-            for (int result : results) {
-                if (result > 0 || result == PreparedStatement.SUCCESS_NO_INFO) {
-                    savedCount++;
+                for (int result : results) {
+                    if (result > 0 || result == PreparedStatement.SUCCESS_NO_INFO) {
+                        savedCount++;
+                    }
                 }
-            }
 
-            Logger.info("Batch сохранение: " + savedCount + "/" + statsList.size() + " видео");
+                Logger.info("Batch сохранение: " + savedCount + "/" + statsList.size() + " видео");
+
+            } catch (SQLException e) {
+                if (conn != null) {
+                    conn.rollback();  // ✅ ОТКАТ НА ТОМ ЖЕ СОЕДИНЕНИИ
+                }
+                throw e;
+            }
 
         } catch (SQLException e) {
             Logger.error("Ошибка batch сохранения: " + e.getMessage());
-            try (Connection conn = DbConnection.getConnection()) {
-                conn.rollback();
-            } catch (SQLException ex) {
-                Logger.error("Ошибка отката транзакции: " + ex.getMessage());
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.setAutoCommit(true);  // ✅ ВОЗВРАЩАЕМ ПО УМОЛЧАНИЮ
+                    conn.close();
+                } catch (SQLException e) {
+                    Logger.error("Ошибка закрытия соединения: " + e.getMessage());
+                }
             }
         }
 
