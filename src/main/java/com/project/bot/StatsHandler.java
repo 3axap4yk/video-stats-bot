@@ -1,7 +1,7 @@
 package com.project.bot;
 
 import com.project.repository.VideoRepository;
-import com.project.utils.ViewFormatter;
+import com.project.utils.FormatUtils;
 
 import java.util.Map;
 
@@ -23,7 +23,7 @@ public class StatsHandler {
         sb.append("━━━━━━━━━━━━━━━━━━\n");
         sb.append("📈 <b>Общая статистика:</b>\n");
         sb.append("• Всего видео: ").append(totalVideos).append("\n");
-        sb.append("• Всего просмотров: ").append(ViewFormatter.formatViews(totalViews)).append("\n\n");
+        sb.append("• Всего просмотров: ").append(FormatUtils.formatViews(totalViews)).append("\n\n");
 
         Map<String, Integer> platformCount = videoRepository.getPlatformCount();
         Map<String, Long> platformViews = videoRepository.getPlatformViews();
@@ -38,7 +38,7 @@ public class StatsHandler {
                 double percent = totalViews > 0 ? (views * 100.0 / totalViews) : 0;
                 sb.append("• ").append(platform).append(": ")
                         .append(count).append(" видео, ")
-                        .append(ViewFormatter.formatViews(views))
+                        .append(FormatUtils.formatViews(views))
                         .append(String.format(" (%.1f%%)\n", percent));
             }
             sb.append("\n");
@@ -50,8 +50,8 @@ public class StatsHandler {
             sb.append("🏆 <b>Топ-5 популярных видео:</b>\n");
             int rank = 1;
             for (var video : topVideos) {
-                sb.append(rank++).append(". <b>").append(ViewFormatter.escapeHtml(video.getTitle()))
-                        .append("</b>\n   👁️ ").append(ViewFormatter.formatViews(video.getViewCount()))
+                sb.append(rank++).append(". <b>").append(FormatUtils.escapeHtml(video.getTitle()))
+                        .append("</b>\n   👁️ ").append(FormatUtils.formatViews(video.getViewCount()))
                         .append("\n\n");
             }
         }
@@ -64,12 +64,17 @@ public class StatsHandler {
             sb.append("(Данные появятся через несколько дней после добавления видео)\n");
         } else {
             for (var g : growth) {
-                String arrow = g.getGrowthPercent() >= 0 ? "📈 +" : "📉 ";
-                sb.append("• <b>").append(ViewFormatter.escapeHtml(g.getTitle())).append("</b>\n")
-                        .append("  ").append(arrow).append(String.format("%.1f", Math.abs(g.getGrowthPercent()))).append("%")
-                        .append(" (").append(ViewFormatter.formatViews(g.getOldViews()))
-                        .append(" → ").append(ViewFormatter.formatViews(g.getNewViews()))
-                        .append(")\n\n");
+                long diff = g.getNewViews() - g.getOldViews();
+                String arrow = diff >= 0 ? "📈 +" : "📉 ";
+                double percent = g.getGrowthPercent();
+                String diffFormatted = FormatUtils.formatViews(Math.abs(diff));
+                String sign = diff >= 0 ? "+" : "-";
+
+                sb.append("• <b>").append(FormatUtils.escapeHtml(g.getTitle())).append("</b>\n")
+                        .append("  ").append(arrow).append(String.format("%.1f%%", Math.abs(percent)))
+                        .append(" (").append(sign).append(diffFormatted).append(") | ")
+                        .append(FormatUtils.formatViews(g.getOldViews()))
+                        .append(" → ").append(FormatUtils.formatViews(g.getNewViews())).append("\n\n");
             }
         }
 

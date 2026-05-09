@@ -7,9 +7,16 @@ import io.github.cdimascio.dotenv.Dotenv;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.Statement;
 
+/**
+ * Управление подключением к базе данных PostgreSQL.
+ * Использует HikariCP для пула соединений.
+ * Конфигурация загружается из переменных окружения (.env файл).
+ *
+ * Структура БД создаётся через db/init.sql при первом запуске контейнера.
+ */
 public class DbConnection {
+
     private static HikariDataSource dataSource;
 
     static {
@@ -39,8 +46,6 @@ public class DbConnection {
             dataSource = new HikariDataSource(config);
             Logger.info("Пул соединений с БД инициализирован");
 
-            initDatabase();
-
         } catch (ClassNotFoundException e) {
             Logger.error("Драйвер PostgreSQL не найден", e);
             throw new RuntimeException("Драйвер PostgreSQL не найден", e);
@@ -55,75 +60,6 @@ public class DbConnection {
             throw new SQLException("Пул соединений не инициализирован");
         }
         return dataSource.getConnection();
-    }
-
-    public static void initDatabase() {
-        String sql = """
-            -- Таблица videos
-            CREATE TABLE IF NOT EXISTS videos (
-                id SERIAL PRIMARY KEY,
-                link TEXT NOT NULL UNIQUE,
-                platform VARCHAR(50) NOT NULL,
-                title TEXT NOT NULL,
-                views_count BIGINT NOT NULL DEFAULT 0,
-                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                hosting_unavailable BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT NOW()
-            );
-            
-            -- Таблица vk
-            CREATE TABLE IF NOT EXISTS vk (
-                id SERIAL PRIMARY KEY,
-                video_link TEXT NOT NULL UNIQUE,
-                id_vk VARCHAR(50),
-                id_vk_external VARCHAR(50),
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            );
-            
-            -- Таблица youtube
-            CREATE TABLE IF NOT EXISTS youtube (
-                id SERIAL PRIMARY KEY,
-                video_link TEXT NOT NULL UNIQUE,
-                id_youtube VARCHAR(50),
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            );
-            
-            -- Таблица истории просмотров
-            CREATE TABLE IF NOT EXISTS views_history (
-                id SERIAL PRIMARY KEY,
-                video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
-                views_count BIGINT NOT NULL,
-                recorded_at TIMESTAMP DEFAULT NOW()
-            );
-            
-            -- Индексы для videos
-            CREATE INDEX IF NOT EXISTS idx_videos_platform ON videos(platform);
-            CREATE INDEX IF NOT EXISTS idx_videos_last_updated ON videos(last_updated);
-            CREATE INDEX IF NOT EXISTS idx_videos_views_count ON videos(views_count DESC);
-            CREATE INDEX IF NOT EXISTS idx_videos_hosting_unavailable ON videos(hosting_unavailable);
-            
-            -- Индексы для vk
-            CREATE INDEX IF NOT EXISTS idx_vk_video_link ON vk(video_link);
-            CREATE INDEX IF NOT EXISTS idx_vk_id_vk ON vk(id_vk);
-            
-            -- Индексы для youtube
-            CREATE INDEX IF NOT EXISTS idx_youtube_video_link ON youtube(video_link);
-            CREATE INDEX IF NOT EXISTS idx_youtube_id_youtube ON youtube(id_youtube);
-            
-            -- Индексы для views_history
-            CREATE INDEX IF NOT EXISTS idx_views_history_video_id ON views_history(video_id);
-            CREATE INDEX IF NOT EXISTS idx_views_history_recorded_at ON views_history(recorded_at DESC);
-        """;
-
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement()) {
-            stmt.execute(sql);
-            Logger.info("Таблицы БД инициализированы");
-        } catch (SQLException e) {
-            Logger.error("Ошибка инициализации БД: " + e.getMessage(), e);
-        }
     }
 
     public static boolean isDatabaseAvailable() {

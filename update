@@ -4,26 +4,33 @@ cd "$(dirname "$0")"
 
 set -e
 
-PROJECT_NAME="video-stats-bot"
+LOCKFILE="/tmp/video-stats-update.lock"
 
-echo "Проверяем зависимости..."
-
-command -v docker >/dev/null 2>&1 || { echo "❌ Docker не установлен"; exit 1; }
-command -v docker compose >/dev/null 2>&1 || { echo "❌ Docker Compose не установлен"; exit 1; }
-
-echo "Проверяем доступность Telegram API..."
-if curl -Is --max-time 5 "https://api.telegram.org" > /dev/null 2>&1; then
-    echo "✅ Telegram API доступен"
-else
-    echo "❌ ОШИБКА: Telegram API недоступен или соединение разорвано"
-    exit 1
+if [ -f "$LOCKFILE" ]; then
+  echo "⚠️ Скрипт уже выполняется"
+  exit 1
 fi
+
+trap "rm -f $LOCKFILE" EXIT
+touch "$LOCKFILE"
+
+# Загружаем .env
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+else
+  echo "❌ Файл .env не найден"
+  exit 1
+fi
+
+DB_CONTAINER="video_stats_db"
 
 echo "Проверяем доступность YouTube API..."
 if curl -Is --max-time 5 "https://www.googleapis.com" > /dev/null 2>&1; then
     echo "✅ YouTube API доступен"
 else
-    echo "❌ ОШИБКА: YouTube API недоступен или соединение разорвано"
+    echo "❌ ОШИБКА: YouTube API недоступен"
     exit 1
 fi
 
@@ -31,22 +38,42 @@ echo "Проверяем доступность VK API..."
 if curl -Is --max-time 5 "https://api.vk.com" > /dev/null 2>&1; then
     echo "✅ VK API доступен"
 else
-    echo "❌ ОШИБКА: VK API недоступен или соединение разорвано"
+    echo "❌ ОШИБКА: VK API недоступен"
     exit 1
 fi
 
-echo "Очищаем старое окружение..."
+# Бэкап
+echo "📦 Создаём бэкап базы данных..."
+
+mkdir -p backups
+BACKUP_FILE="backups/backup_$(date +%F_%H-%M-%S).sql"
+
+if docker ps --format '{{.Names}}' | grep -q "$DB_CONTAINER"; then
+    docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" "$DB_NAME" > "$BACKUP_FILE"
+
+    if [ ! -s "$BACKUP_FILE" ]; then
+      echo "❌ Бэкап пустой"
+      exit 1
+    fi
+
+    echo "✅ Бэкап сохранён: $BACKUP_FILE"
+else
+    echo "⚠️ Контейнер БД не запущен, бэкап пропущен"
+fi
+
+# Обновление
+echo "📥 Обновляем код..."
+git pull
+
+echo "🛑 Останавливаем контейнеры..."
 docker compose down --remove-orphans
 
-echo "Собираем проект..."
+echo "🔨 Пересобираем..."
 chmod +x ./gradlew || true
 ./gradlew clean build
 
-echo "Запускаем контейнеры..."
+echo "🐳 Запускаем..."
 docker compose up -d --build
-
-echo "Ждём запуск бота..."
-sleep 5
 
 echo "Проверяем статус базы данных..."
 RETRIES=10
@@ -69,4 +96,5 @@ echo "Логи бота:"
 docker logs video_stats_bot --tail 30 | grep -v "Ctrl+C для остановки"
 
 echo ""
-echo "✅ Бот успешно запущен!"
+echo "✅ Обновление завершено!"
+echo "📦 Бэкап: $BACKUP_FILE"

@@ -7,10 +7,11 @@ import com.pengrad.telegrambot.request.AnswerCallbackQuery;
 import com.pengrad.telegrambot.request.DeleteMessage;
 import com.pengrad.telegrambot.request.SendMessage;
 import com.pengrad.telegrambot.response.SendResponse;
+import com.project.App;
 import com.project.model.VideoStats;
 import com.project.repository.VideoRepository;
 import com.project.service.StatisticsService;
-import com.project.service.YouTubeException;
+import com.project.service.VideoException;
 import com.project.utils.Logger;
 
 import java.util.Set;
@@ -23,14 +24,16 @@ import static com.project.bot.BotMessages.*;
 import static com.project.utils.FormatUtils.formatViews;
 
 /**
- * Обработчик добавления новых ссылок на видео
+ * Обработчик добавления новых ссылок на видео.
+ * Управляет состоянием ожидания URL от пользователя и обрабатывает ввод.
  */
 public class AddLinks {
 
     private final TelegramBot bot;
     private final UrlResolver urlResolver;
-    private final LongConsumer showStartDialog;
+    private final LongConsumer showStartDialog; // Колбэк для возврата в главное меню
     private final VideoRepository videoRepository = new VideoRepository();
+    // Хранит ID чатов, которые сейчас находятся в режиме ожидания ввода ссылки
     private final Set<Long> chatsAwaitingUrl = ConcurrentHashMap.newKeySet();
 
     public AddLinks(TelegramBot bot, UrlResolver urlResolver, LongConsumer showStartDialog) {
@@ -39,22 +42,26 @@ public class AddLinks {
         this.showStartDialog = showStartDialog;
     }
 
+    // Проверяет, ожидает ли чат ввода ссылки
     public boolean isAwaitingUrl(long chatId) {
         return chatsAwaitingUrl.contains(chatId);
     }
 
+    // Принудительно выводит чат из режима ожидания
     public void resetChat(long chatId) {
         chatsAwaitingUrl.remove(chatId);
     }
 
+    // Активирует режим ожидания URL и отправляет prompt с кнопкой отмены
     public void onAddLinkClick(long chatId, String callbackQueryId) {
         chatsAwaitingUrl.add(chatId);
         InlineKeyboardButton cancelBtn = new InlineKeyboardButton(BTN_CANCEL).callbackData(CANCEL);
         InlineKeyboardMarkup cancelKeyboard = new InlineKeyboardMarkup(cancelBtn);
-        bot.execute(new AnswerCallbackQuery(callbackQueryId));
+        bot.execute(new AnswerCallbackQuery(callbackQueryId)); // Закрываем "часики" на кнопке
         bot.execute(new SendMessage(chatId, PROMPT_SEND_URL).replyMarkup(cancelKeyboard));
     }
 
+    // Отмена добавления: выходит из режима ожидания и возвращает в меню
     public void onCancel(long chatId, String callbackQueryId) {
         chatsAwaitingUrl.remove(chatId);
         bot.execute(new AnswerCallbackQuery(callbackQueryId));
@@ -62,45 +69,64 @@ public class AddLinks {
         showStartDialog.accept(chatId);
     }
 
+    // Возврат назад: аналогично отмене, но без сообщения об отмене
     public void onBack(long chatId, String callbackQueryId) {
         chatsAwaitingUrl.remove(chatId);
         bot.execute(new AnswerCallbackQuery(callbackQueryId));
         showStartDialog.accept(chatId);
     }
 
+    // Возвращает сообщение об ошибке API в зависимости от платформы
+    private String getApiFailedMessage(UrlResolver.Platform platform) {
+        if (platform == UrlResolver.Platform.VK) {
+            return "Не удалось получить данные с VK (API или сеть). Попробуйте ещё раз позже.";
+        }
+        return YOUTUBE_API_FAILED;
+    }
+
+    /**
+     * Обрабатывает присланную пользователем ссылку.
+     * Выполняет валидацию, проверку платформы, получение статистики и сохранение.
+     */
     public void onSubmittedUrl(long chatId, String rawUrl) {
+        // Нормализация: удаляем пробелы по краям и внутри URL
         String normalizedUrl = rawUrl == null ? "" : rawUrl.trim();
         normalizedUrl = normalizedUrl.replaceAll("\\s+", "");
 
+        // Проверка формата URL
         if (!urlResolver.isValidUrl(normalizedUrl)) {
             bot.execute(new SendMessage(chatId, INVALID_URL).replyMarkup(buildCancelKeyboard()));
             return;
         }
 
+        // Определение платформы (YouTube, VK и т.д.)
         UrlResolver.Platform platform = urlResolver.resolvePlatform(normalizedUrl);
         if (platform == UrlResolver.Platform.UNKNOWN) {
             bot.execute(new SendMessage(chatId, UNSUPPORTED_PLATFORM).replyMarkup(buildCancelKeyboard()));
             return;
         }
 
-        if (!urlResolver.pointsToExistingVideo(normalizedUrl)) {
+        // Проверка существования видео/ресурса по ссылке (для VK пропускаем, так как API сам проверит)
+        if (platform != UrlResolver.Platform.VK && !urlResolver.pointsToExistingVideo(normalizedUrl)) {
             bot.execute(new SendMessage(chatId, DEAD_LINK).replyMarkup(buildCancelKeyboard()));
             return;
         }
 
+        // VK обработка
         if (platform == UrlResolver.Platform.VK) {
-            bot.execute(new SendMessage(chatId, VK_STATS_NOT_SUPPORTED).replyMarkup(buildCancelKeyboard()));
-            return;
+            Logger.info("Обработка VK видео: " + normalizedUrl);
+            // Продолжаем обработку VK видео
         }
 
+        // Отправляем временное сообщение о процессе загрузки
         Integer progressMessageId = sendProgressMessage(chatId);
         try {
             StatisticsService statsService;
             try {
                 statsService = new StatisticsService(normalizedUrl);
-            } catch (YouTubeException e) {
+            } catch (VideoException e) {
                 Logger.error("Ошибка создания StatisticsService: " + e.getMessage());
-                bot.execute(new SendMessage(chatId, YOUTUBE_API_FAILED).replyMarkup(buildCancelKeyboard()));
+                bot.execute(new SendMessage(chatId, getApiFailedMessage(platform)).replyMarkup(buildCancelKeyboard()));
                 return;
             }
 
@@ -109,41 +135,73 @@ public class AddLinks {
             try {
                 title = statsService.getTitle();
                 viewCount = statsService.getViewCount();
-            } catch (YouTubeException e) {
-                Logger.error("Ошибка получения данных с YouTube: " + e.getMessage());
-                bot.execute(new SendMessage(chatId, YOUTUBE_API_FAILED).replyMarkup(buildCancelKeyboard()));
+            } catch (VideoException e) {
+                Logger.error("Ошибка получения данных с " + platform + ": " + e.getMessage());
+                bot.execute(new SendMessage(chatId, getApiFailedMessage(platform)).replyMarkup(buildCancelKeyboard()));
                 return;
             }
 
+            // Данные получены — выходим из режима ожидания URL
             chatsAwaitingUrl.remove(chatId);
 
+            // Заполняем объект статистики
             VideoStats stats = new VideoStats();
             stats.setVideoUrl(normalizedUrl);
-            stats.setPlatform("YouTube");
+            stats.setPlatform(platform.toString());
             stats.setTitle(title);
             stats.setViewCount(viewCount);
             stats.setHostingUnavailable(false);
 
+            // Клавиатура с кнопкой "Добавить ссылку" и "Вернуться"
             InlineKeyboardButton backBtn = new InlineKeyboardButton(BTN_BACK).callbackData(BACK);
-            InlineKeyboardMarkup backKeyboard = new InlineKeyboardMarkup(backBtn);
+            InlineKeyboardButton addLinkBtn = new InlineKeyboardButton(BTN_ADD_LINK).callbackData(BotCallbacks.ADD_LINK);
+            InlineKeyboardMarkup backKeyboard = new InlineKeyboardMarkup(
+                    new InlineKeyboardButton[][]{{addLinkBtn}, {backBtn}}
+            );
 
+            // Проверка на дубликат
             VideoStats existing = videoRepository.findByUrl(stats.getVideoUrl());
             if (existing != null) {
                 String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
-                        + "\n\nЭта ссылка уже добавлена.";
+                        + "\n\nЭта ссылка уже добавлена. Попробуйте ещё раз, воспользовавшись кнопкой «Добавить ссылку»";
                 bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
                 return;
             }
 
+            // Сохранение в БД (сначала в videos, потом в специфические таблицы)
             videoRepository.save(stats);
+
+            // Сохраняем ID платформы в соответствующую таблицу ПОСЛЕ сохранения в videos
+            if (platform == UrlResolver.Platform.YOUTUBE) {
+                String youtubeId = urlResolver.extractYouTubeIdFromUrl(normalizedUrl);
+                if (youtubeId != null && !youtubeId.isEmpty()) {
+                    stats.setPlatformVideoId(youtubeId);
+                    videoRepository.saveYouTubeId(normalizedUrl, youtubeId);
+                    Logger.info("Сохранён YouTube ID: " + youtubeId);
+                } else {
+                    Logger.warn("Не удалось извлечь YouTube ID из URL: " + normalizedUrl);
+                }
+            } else if (platform == UrlResolver.Platform.VK) {
+                String vkId = urlResolver.extractVkIdFromUrl(normalizedUrl);
+                if (vkId != null && !vkId.isEmpty()) {
+                    stats.setPlatformVideoId(vkId);
+                    videoRepository.saveVkIdFull(normalizedUrl, vkId);
+                    Logger.info("✅ Сохранён VK ID: " + vkId);
+                } else {
+                    Logger.error("❌ VK ID не извлечён для: " + normalizedUrl);
+                }
+            }
+
             String text = VIDEO_STATS_TEMPLATE.formatted(stats.getTitle(), formatViews(stats.getViewCount()), stats.getPlatform())
-                    + "\n\nСсылка добавлена.";
+                    + "\n\nСсылка добавлена. Если хотите добавить ещё, воспользуйтесь кнопкой «Добавить ссылку»";
             bot.execute(new SendMessage(chatId, text).replyMarkup(backKeyboard));
         } finally {
+            // Удаляем сообщение о прогрессе в любом случае
             deleteMessageIfPresent(chatId, progressMessageId);
         }
     }
 
+    // Отправляет сообщение "Запрос выполняется..." и возвращает его ID
     private Integer sendProgressMessage(long chatId) {
         SendResponse response = bot.execute(new SendMessage(chatId, REQUEST_IN_PROGRESS));
         if (response.isOk() && response.message() != null) {
@@ -152,6 +210,7 @@ public class AddLinks {
         return null;
     }
 
+    // Удаляет сообщение по ID, если оно существует
     private void deleteMessageIfPresent(long chatId, Integer messageId) {
         if (messageId == null) {
             return;
@@ -159,6 +218,7 @@ public class AddLinks {
         bot.execute(new DeleteMessage(chatId, messageId));
     }
 
+    // Создаёт клавиатуру с единственной кнопкой "Отмена"
     private InlineKeyboardMarkup buildCancelKeyboard() {
         InlineKeyboardButton cancelBtn = new InlineKeyboardButton(BTN_CANCEL).callbackData(CANCEL);
         return new InlineKeyboardMarkup(cancelBtn);
