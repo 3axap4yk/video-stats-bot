@@ -68,7 +68,9 @@
 - [Скринкаст развертывания на сервере и пример работы бота](#️-скринкаст-развертывания-на-сервере-и-пример-работы-бота)
 - [Требования для развертывания](#-требования-для-развертывания)
 - [Быстрый старт (Self-Hosted)](#-быстрый-старт-self-hosted)
+- [Скрипты и их использование](#скрипты-и-их-использование)
 - [Конфигурация (.env)](#️-конфигурация-env)
+- [Управление транзакциями](#-управление-транзакциями)
 - [Структура проекта](#-структура-проекта)
 - [Разработка](#-разработка)
 - [Возможные проблемы](#-возможные-проблемы-и-их-решение)
@@ -93,8 +95,7 @@
 - `/update` — обновить просмотры
 
 ## ▶️ Скринкаст развертывания на сервере и пример работы бота
-ИЗМЕНИТЬ!
-[Ссылка на скринкаст](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
+[Ссылка на скринкаст](https://youtu.be/Zs1G_Sa_UZ0)
 
 ## 🛠️ Технологический стек
 
@@ -116,7 +117,7 @@
 - RAM - 1 Гб / SSD 20 Гб;
 - Docker Engine 20.10+;
 - Docker Compose 1.29+;
-- Доступ к Telegram API.
+- Доступ к Telegram API, YouTube API и VK API.
 
 ### Учётные записи и ключи
 - **Telegram Bot Token** — получить у [@BotFather](https://t.me/BotFather);
@@ -211,120 +212,6 @@ docker-compose logs -f
 ```
 3. Найдите вашего бота в Telegram по имени и отправьте команду `/start`.
 
-## ⚙️ Конфигурация (.env)
-
-Все настройки проекта находятся в файле `.env`. Ниже перечислены все переменные, которые необходимо заполнить:
-
-### Telegram Bot
-```
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-```
-### Whitelist
-```
-# Если несколько ID, то записывайте через запятую без пробелов
-TELEGRAM_WHITELIST_IDS=your_telegram_id_here1,your_telegram_id_here2
-```
-> Внимание: Если вы оставите `TELEGRAM_WHITELIST_IDS` пустым, то доступ к боту будет у всех пользователей!
-
-### YouTube API
-```
-YOUTUBE_API_KEY=your_youtube_api_key_here
-```
-
-### VK API
-```
-VK_ACCESS_TOKEN=your_vk_access_token_here
-VK_API_VERSION=5.131
-```
-
-### База данных
-```
-DB_HOST=db
-DB_PORT=5432
-DB_NAME=your_db_name_here
-DB_USER=your_username_here
-DB_PASSWORD=your_password_here
-```
-> Внимание: Файл `.env` содержит секретные данные. Никогда не добавляйте его в репозиторий — он уже находится в .gitignore.
-
-## 📂 Структура проекта
-
-### Архитектура
-
-Приложение построено по слоистой архитектуре:
-
-- **Bot Layer** — обработка Telegram команд
-- **Service Layer** — обработка логики и работа с внешними API
-- **Repository Layer** — работа с базой данных
-
-### Модули
-```
-video-stats-bot/
-├── src/main/java/com/project/
-│ ├── bot/ # Telegram-бот (команды, кнопки, обработчики)
-│ ├── config/ # Конфигурация приложения
-│ ├── model/ # Модели данных
-│ ├── repository/ # Работа с БД (JDBC)
-│ └── service/ # Бизнес-логика и работа с API (YouTube, ВК)
-├── src/test/ # Тесты
-├── db # SQL схема и инициализация БД
-│ └── init.sql
-├── Dockerfile # Инструкция сборки Docker-образа
-├── docker-compose.yml # Запуск PostgreSQL и бота
-├── .env.example # Шаблон переменных окружения
-├── build.gradle # Конфигурация сборки Gradle
-├── gradlew # Gradle Wrapper
-├── run # Скрипт запуска проекта
-└── README.md
-```
-
-## 💻 Разработка
-
-### Локальный запуск (без Docker)
-
-1. Установите Java 17;
-2. Настройте переменные окружения. Скопируйте и заполните `.env`:
-   ```bash
-   cp .env.example .env
-   nano .env
-   ```
-> Подробное описание всех переменных — в разделе [«Конфигурация (.env)»](#️-конфигурация-env).
-3. Выполните:
-   - **Linux / macOS**
-      ```bash
-      ./gradlew run
-      ```
-   - **Windows**
-      ```bash
-      gradlew.bat run
-      ```
----
-### Запуск тестов
-
-- **Linux / macOS**
-```bash
-./gradlew test
-```
-- **Windows**
-```bash
-gradlew.bat test
-```
----
-### Сборка jar-файла
-
-- **Linux / macOS**
-```bash
-./gradlew jar
-```
-
-- **Windows**
-```bash
-gradlew.bat jar
-```
-> Скомпилированный `jar` будет находиться в папке `build/libs/`.
-
----
-
 ### Скрипты и их использование
 
 Помимо скрипта запуска `./run`, описанного выше, имеются также:
@@ -407,6 +294,130 @@ backups/backup_2026-05-07_14-30-22.sql
 - перенос данных;
 - откат после неудачного обновления;
 - восстановление тестового окружения.
+
+## ⚙️ Конфигурация (.env)
+
+Все настройки проекта находятся в файле `.env`. Ниже перечислены все переменные, которые необходимо заполнить:
+
+### Telegram Bot
+```
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+```
+### Whitelist
+```
+# Если несколько ID, то записывайте через запятую без пробелов
+TELEGRAM_WHITELIST_IDS=your_telegram_id_here1,your_telegram_id_here2
+```
+> Внимание: Если вы оставите `TELEGRAM_WHITELIST_IDS` пустым, то доступ к боту будет у всех пользователей!
+
+### YouTube API
+```
+YOUTUBE_API_KEY=your_youtube_api_key_here
+```
+
+### VK API
+```
+VK_ACCESS_TOKEN=your_vk_access_token_here
+VK_API_VERSION=5.131
+```
+
+### База данных
+```
+DB_HOST=db
+DB_PORT=5432
+DB_NAME=your_db_name_here
+DB_USER=your_username_here
+DB_PASSWORD=your_password_here
+```
+> Внимание: Файл `.env` содержит секретные данные. Никогда не добавляйте его в репозиторий — он уже находится в .gitignore.
+
+## 🔐 Управление транзакциями
+
+Проект обеспечивает целостность данных на всех уровнях:
+
+- **Одиночное сохранение** — видео и платформенные ID сохраняются в одной транзакции (videos + youtube/vk)
+- **Batch-обновление** — массовое обновление статистики выполняется в единой транзакции с полным откатом при ошибке
+- **Идемпотентность** — `ON CONFLICT` гарантирует отсутствие дублей
+
+При любой ошибке выполняется `rollback()` — в БД не остаётся "половинчатых" данных.
+
+## 📂 Структура проекта
+
+### Архитектура
+
+Приложение построено по слоистой архитектуре:
+
+- **Bot Layer** — обработка Telegram команд
+- **Service Layer** — обработка логики и работа с внешними API
+- **Repository Layer** — работа с базой данных
+
+### Модули
+```
+video-stats-bot/
+├── src/main/java/com/project/
+│ ├── bot/ # Telegram-бот (команды, кнопки, обработчики)
+│ ├── config/ # Конфигурация приложения
+│ ├── model/ # Модели данных
+│ ├── repository/ # Работа с БД (JDBC)
+│ └── service/ # Бизнес-логика и работа с API (YouTube, ВК)
+├── src/test/ # Тесты
+├── db # SQL схема и инициализация БД
+│ └── init.sql
+├── Dockerfile # Инструкция сборки Docker-образа
+├── docker-compose.yml # Запуск PostgreSQL и бота
+├── .env.example # Шаблон переменных окружения
+├── build.gradle # Конфигурация сборки Gradle
+├── gradlew # Gradle Wrapper
+├── run # Скрипт запуска проекта
+└── README.md
+```
+
+## 💻 Разработка
+
+### Локальный запуск (без Docker)
+
+1. Установите Java 17;
+2. Настройте переменные окружения. Скопируйте и заполните `.env`:
+   ```bash
+   cp .env.example .env
+   nano .env
+   ```
+> Подробное описание всех переменных — в разделе [«Конфигурация (.env)»](#️-конфигурация-env).
+3. Выполните:
+   - **Linux / macOS**
+      ```bash
+      ./gradlew run
+      ```
+   - **Windows**
+      ```bash
+      gradlew.bat run
+      ```
+---
+### Запуск тестов
+
+- **Linux / macOS**
+```bash
+./gradlew test
+```
+- **Windows**
+```bash
+gradlew.bat test
+```
+---
+### Сборка jar-файла
+
+- **Linux / macOS**
+```bash
+./gradlew jar
+```
+
+- **Windows**
+```bash
+gradlew.bat jar
+```
+> Скомпилированный `jar` будет находиться в папке `build/libs/`.
+
+---
 
 ### Подключение к базе данных для отладки
 
